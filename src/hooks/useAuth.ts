@@ -24,6 +24,15 @@ function getErrorMessage(error: unknown): string {
   return "Authentication failed";
 }
 
+interface PulseE2EAuthPayload {
+  uid: string;
+  isAdmin?: boolean;
+}
+
+interface PulseE2EWindow extends Window {
+  __PULSE_E2E_AUTH__?: PulseE2EAuthPayload;
+}
+
 export function useAuth(): UseAuthResult {
   const user = useAuthStore((state) => state.user);
   const firestoreUser = useAuthStore((state) => state.firestoreUser);
@@ -34,6 +43,11 @@ export function useAuth(): UseAuthResult {
   const setLoading = useAuthStore((state) => state.setLoading);
 
   const [error, setError] = useState<string | null>(null);
+
+  const e2eAuth =
+    typeof window !== "undefined"
+      ? ((window as PulseE2EWindow).__PULSE_E2E_AUTH__ ?? null)
+      : null;
 
   const handleAuthChange = useCallback(
     async (firebaseUser: FirebaseUser | null) => {
@@ -62,6 +76,10 @@ export function useAuth(): UseAuthResult {
   );
 
   useEffect(() => {
+    if (e2eAuth) {
+      return;
+    }
+
     setLoading(true);
 
     const unsubscribe = onAuthChange((firebaseUser) => {
@@ -71,7 +89,18 @@ export function useAuth(): UseAuthResult {
     return () => {
       unsubscribe();
     };
-  }, [handleAuthChange, setLoading]);
+  }, [e2eAuth, handleAuthChange, setLoading]);
+
+  if (e2eAuth) {
+    return {
+      user: { uid: e2eAuth.uid } as FirebaseUser,
+      firestoreUser: null,
+      loading: false,
+      error: null,
+      isAdmin: e2eAuth.isAdmin ?? false,
+      isAuthenticated: true,
+    };
+  }
 
   return {
     user,

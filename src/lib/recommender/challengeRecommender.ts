@@ -40,7 +40,7 @@ function average(values: number[]): number {
 }
 
 function getRecommendedDuration(eventMinutesElapsed: number): number {
-  const halftimeWindow = eventMinutesElapsed >= 45 && eventMinutesElapsed <= 55;
+  const halftimeWindow = eventMinutesElapsed > 45 && eventMinutesElapsed <= 55;
 
   if (halftimeWindow) {
     return 8;

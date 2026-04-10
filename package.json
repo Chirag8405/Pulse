@@ -53,6 +53,7 @@
     "zustand": "^5.0.12"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.11.1",
     "@axe-core/react": "^4.11.1",
     "@next/bundle-analyzer": "^16.2.3",
     "@playwright/test": "^1.59.1",

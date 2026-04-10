@@ -220,6 +220,20 @@ export default function JoinPage() {
             })}
           </div>
 
+          <p className="mb-4 text-center font-mono text-xs font-bold uppercase tracking-widest text-muted-foreground">
+            Step {step} of 3
+          </p>
+
+          {step > 1 ? (
+            <button
+              type="button"
+              onClick={goToPreviousStep}
+              className="mb-4 border-2 border-border px-3 py-1 text-xs font-bold"
+            >
+              Back
+            </button>
+          ) : null}
+
           <div
             key={`${step}-${direction}`}
             className={cn(
