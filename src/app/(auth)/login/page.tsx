@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -44,7 +44,27 @@ function getErrorMessage(error: unknown): string {
   return "Authentication failed. Please try again.";
 }
 
-export default function LoginPage() {
+function LoginFallback() {
+  return (
+    <main
+      className="flex min-h-screen items-center justify-center bg-background px-4 py-10"
+      style={{
+        backgroundImage:
+          "radial-gradient(circle, #d1d5db 1px, transparent 1px)",
+        backgroundSize: "24px 24px",
+      }}
+    >
+      <section className="w-full max-w-sm border-2 border-black bg-card p-6 shadow-[4px_4px_0px_0px_rgb(0_0_0)]">
+        <h1 className="font-mono text-4xl font-black tracking-tight text-primary">
+          {APP_NAME}
+        </h1>
+        <p className="mt-3 text-sm text-muted-foreground">Loading login...</p>
+      </section>
+    </main>
+  );
+}
+
+function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isAuthenticated, loading } = useAuth();
@@ -150,5 +170,13 @@ export default function LoginPage() {
         </p>
       </section>
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<LoginFallback />}>
+      <LoginContent />
+    </Suspense>
   );
 }

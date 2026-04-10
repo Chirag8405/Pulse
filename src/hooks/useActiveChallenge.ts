@@ -22,20 +22,20 @@ function getErrorMessage(error: unknown): string {
 export function useActiveChallenge(
   eventId: string | null | undefined
 ): UseActiveChallengeResult {
-  const [data, setData] = useState<Challenge | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [snapshot, setSnapshot] = useState<{
+    eventId: string | null;
+    data: Challenge | null;
+    error: string | null;
+  }>({
+    eventId: null,
+    data: null,
+    error: null,
+  });
 
   useEffect(() => {
     if (!eventId) {
-      setData(null);
-      setError(null);
-      setLoading(false);
       return;
     }
-
-    setLoading(true);
-    setError(null);
 
     const activeChallengeQuery = query(
       challengesCollection,
@@ -49,12 +49,18 @@ export function useActiveChallenge(
       activeChallengeQuery,
       (snapshot) => {
         const challengeDocSnapshot = snapshot.docs[0];
-        setData(challengeDocSnapshot ? challengeDocSnapshot.data() : null);
-        setLoading(false);
+        setSnapshot({
+          eventId,
+          data: challengeDocSnapshot ? challengeDocSnapshot.data() : null,
+          error: null,
+        });
       },
       (snapshotError) => {
-        setError(getErrorMessage(snapshotError));
-        setLoading(false);
+        setSnapshot({
+          eventId,
+          data: null,
+          error: getErrorMessage(snapshotError),
+        });
       }
     );
 
@@ -63,5 +69,15 @@ export function useActiveChallenge(
     };
   }, [eventId]);
 
-  return { data, loading, error };
+  if (!eventId) {
+    return { data: null, loading: false, error: null };
+  }
+
+  const isResolvedForCurrentEvent = snapshot.eventId === eventId;
+
+  return {
+    data: isResolvedForCurrentEvent ? snapshot.data : null,
+    loading: !isResolvedForCurrentEvent,
+    error: isResolvedForCurrentEvent ? snapshot.error : null,
+  };
 }

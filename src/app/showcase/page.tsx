@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import {
   Activity,
   Award,
@@ -23,11 +23,11 @@ import {
   recommendChallengeParams,
 } from "@/lib/recommender/challengeRecommender";
 
+const SHOWCASE_TIMER_END = new Date("2035-01-01T00:01:35.000Z");
+
 export default function ShowcasePage() {
   const [expired, setExpired] = useState(false);
   const [selectedZone, setSelectedZone] = useState<string>(ZONES[0].id);
-
-  const timerEnd = useMemo(() => new Date(Date.now() + 95_000), []);
 
   const recommendation = recommendChallengeParams({
     currentOccupancy: {
@@ -105,7 +105,7 @@ export default function ShowcasePage() {
               <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
                 Challenge Countdown
               </p>
-              <CountdownTimer endTime={timerEnd} onExpire={() => setExpired(true)} />
+              <CountdownTimer endTime={SHOWCASE_TIMER_END} onExpire={() => setExpired(true)} />
               <p className="text-sm text-muted-foreground">
                 {expired ? "Challenge window expired" : "Move now to maximize spread"}
               </p>

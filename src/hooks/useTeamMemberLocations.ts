@@ -34,20 +34,20 @@ const INITIAL_DATA: TeamMemberLocationData = {
 export function useTeamMemberLocations(
   teamId: string | null | undefined
 ): UseTeamMemberLocationsResult {
-  const [data, setData] = useState<TeamMemberLocationData>(INITIAL_DATA);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [snapshot, setSnapshot] = useState<{
+    teamId: string | null;
+    data: TeamMemberLocationData;
+    error: string | null;
+  }>({
+    teamId: null,
+    data: INITIAL_DATA,
+    error: null,
+  });
 
   useEffect(() => {
     if (!teamId) {
-      setData(INITIAL_DATA);
-      setError(null);
-      setLoading(false);
       return;
     }
-
-    setLoading(true);
-    setError(null);
 
     const unsubscribe = onSnapshot(
       memberLocationsCollection(teamId),
@@ -61,16 +61,22 @@ export function useTeamMemberLocations(
           return acc;
         }, {});
 
-        setData({
-          byZone,
-          locations: activeLocations,
-          totalActiveMembers: activeLocations.length,
+        setSnapshot({
+          teamId,
+          data: {
+            byZone,
+            locations: activeLocations,
+            totalActiveMembers: activeLocations.length,
+          },
+          error: null,
         });
-        setLoading(false);
       },
       (snapshotError) => {
-        setError(getErrorMessage(snapshotError));
-        setLoading(false);
+        setSnapshot({
+          teamId,
+          data: INITIAL_DATA,
+          error: getErrorMessage(snapshotError),
+        });
       }
     );
 
@@ -79,5 +85,15 @@ export function useTeamMemberLocations(
     };
   }, [teamId]);
 
-  return { data, loading, error };
+  if (!teamId) {
+    return { data: INITIAL_DATA, loading: false, error: null };
+  }
+
+  const isResolvedForCurrentTeam = snapshot.teamId === teamId;
+
+  return {
+    data: isResolvedForCurrentTeam ? snapshot.data : INITIAL_DATA,
+    loading: !isResolvedForCurrentTeam,
+    error: isResolvedForCurrentTeam ? snapshot.error : null,
+  };
 }

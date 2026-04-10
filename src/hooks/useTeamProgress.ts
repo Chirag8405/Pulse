@@ -10,52 +10,53 @@ interface UseTeamProgressResult {
   error: string | null;
 }
 
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return "Could not load team progress.";
-}
-
 export function useTeamProgress(
   challengeId: string | null | undefined,
   teamId: string | null | undefined
 ): UseTeamProgressResult {
-  const [data, setData] = useState<ChallengeTeamProgress | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [snapshot, setSnapshot] = useState<{
+    key: string | null;
+    data: ChallengeTeamProgress | null;
+    error: string | null;
+  }>({
+    key: null,
+    data: null,
+    error: null,
+  });
+
+  const key = challengeId && teamId ? `${challengeId}:${teamId}` : null;
 
   useEffect(() => {
-    if (!challengeId || !teamId) {
-      setData(null);
-      setLoading(false);
-      setError(null);
+    if (!challengeId || !teamId || !key) {
       return;
     }
 
-    setLoading(true);
-    setError(null);
+    const unsubscribe = subscribeToTeamProgress(
+      challengeId,
+      teamId,
+      (teamProgress) => {
+        setSnapshot({
+          key,
+          data: teamProgress,
+          error: null,
+        });
+      }
+    );
 
-    try {
-      const unsubscribe = subscribeToTeamProgress(
-        challengeId,
-        teamId,
-        (teamProgress) => {
-          setData(teamProgress);
-          setLoading(false);
-        }
-      );
+    return () => {
+      unsubscribe();
+    };
+  }, [challengeId, key, teamId]);
 
-      return () => {
-        unsubscribe();
-      };
-    } catch (subscriptionError) {
-      setError(getErrorMessage(subscriptionError));
-      setLoading(false);
-      return;
-    }
-  }, [challengeId, teamId]);
+  if (!key) {
+    return { data: null, loading: false, error: null };
+  }
 
-  return { data, loading, error };
+  const isResolvedForCurrentRequest = snapshot.key === key;
+
+  return {
+    data: isResolvedForCurrentRequest ? snapshot.data : null,
+    loading: !isResolvedForCurrentRequest,
+    error: isResolvedForCurrentRequest ? snapshot.error : null,
+  };
 }

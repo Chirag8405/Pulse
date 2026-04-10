@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { MapPin, Navigation, ShieldAlert } from "lucide-react";
 import { AuthGuard } from "@/components/layout/AuthGuard";
 import { EventStatusBar } from "@/components/attendee/EventStatusBar";
@@ -32,38 +33,6 @@ import { useTeamProgress } from "@/hooks/useTeamProgress";
 import { useLeaderboard } from "@/hooks/useLeaderboard";
 import { useTeamMemberLocations } from "@/hooks/useTeamMemberLocations";
 import { useLocationTracking } from "@/hooks/useLocationTracking";
-import type { Team } from "@/types/firebase";
-
-function useTeamDocument(teamId: string | null | undefined) {
-  const [team, setTeam] = useState<Team | null>(null);
-
-  useEffect(() => {
-    if (!teamId) {
-      setTeam(null);
-      return;
-    }
-
-    let active = true;
-
-    void getTeamById(teamId)
-      .then((teamDoc) => {
-        if (active) {
-          setTeam(teamDoc);
-        }
-      })
-      .catch(() => {
-        if (active) {
-          setTeam(null);
-        }
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [teamId]);
-
-  return team;
-}
 
 function TeamInfoCard({
   teamName,
@@ -108,7 +77,12 @@ function DashboardContent() {
   const { firestoreUser, loading: authLoading } = useAuth();
 
   const teamId = firestoreUser?.teamId ?? null;
-  const teamDoc = useTeamDocument(teamId);
+  const { data: teamDoc } = useQuery({
+    queryKey: ["team-dashboard", teamId],
+    queryFn: () => getTeamById(teamId as string),
+    enabled: Boolean(teamId),
+    staleTime: 60_000,
+  });
 
   const { data: activeEvent, loading: activeEventLoading, error: activeEventError } =
     useActiveEvent();
@@ -270,7 +244,14 @@ function DashboardContent() {
     }
 
     window.localStorage.setItem(storageKey, "1");
-    setRewardOpen(true);
+
+    const timeoutId = window.setTimeout(() => {
+      setRewardOpen(true);
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
   }, [activeChallenge, teamId, teamProgress?.isCompleted]);
 
   const combinedError =

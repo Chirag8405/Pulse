@@ -240,6 +240,8 @@ function LeaderboardTable({
   const shouldVirtualize = rows.length > 50;
   const scrollParentRef = useRef<HTMLDivElement>(null);
 
+  // TanStack Virtual is intentional here for large lists; React Compiler skips memoizing this hook.
+  // eslint-disable-next-line react-hooks/incompatible-library
   const rowVirtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scrollParentRef.current,

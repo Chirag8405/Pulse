@@ -10,51 +10,50 @@ interface UseLeaderboardResult {
   error: string | null;
 }
 
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return "Could not load leaderboard.";
-}
-
 export function useLeaderboard(
   challengeId: string | null | undefined
 ): UseLeaderboardResult {
-  const [data, setData] = useState<ChallengeTeamProgress[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [snapshot, setSnapshot] = useState<{
+    challengeId: string | null;
+    data: ChallengeTeamProgress[];
+    error: string | null;
+  }>({
+    challengeId: null,
+    data: [],
+    error: null,
+  });
 
   useEffect(() => {
     if (!challengeId) {
-      setData([]);
-      setLoading(false);
-      setError(null);
       return;
     }
 
-    setLoading(true);
-    setError(null);
+    const unsubscribe = subscribeToLeaderboard(
+      challengeId,
+      10,
+      (leaderboardRows) => {
+        setSnapshot({
+          challengeId,
+          data: leaderboardRows,
+          error: null,
+        });
+      }
+    );
 
-    try {
-      const unsubscribe = subscribeToLeaderboard(
-        challengeId,
-        10,
-        (leaderboardRows) => {
-          setData(leaderboardRows);
-          setLoading(false);
-        }
-      );
-
-      return () => {
-        unsubscribe();
-      };
-    } catch (subscriptionError) {
-      setError(getErrorMessage(subscriptionError));
-      setLoading(false);
-      return;
-    }
+    return () => {
+      unsubscribe();
+    };
   }, [challengeId]);
 
-  return { data, loading, error };
+  if (!challengeId) {
+    return { data: [], loading: false, error: null };
+  }
+
+  const isResolvedForCurrentChallenge = snapshot.challengeId === challengeId;
+
+  return {
+    data: isResolvedForCurrentChallenge ? snapshot.data : [],
+    loading: !isResolvedForCurrentChallenge,
+    error: isResolvedForCurrentChallenge ? snapshot.error : null,
+  };
 }

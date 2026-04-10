@@ -147,7 +147,7 @@ export default function JoinPage() {
     void joinTeam(userId, teamId).catch((error) => {
       toast.error(getErrorMessage(error));
     });
-  }, [resetOnboarding, router, selectedTeam?.id, user?.uid]);
+  }, [resetOnboarding, router, selectedTeam, user]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {

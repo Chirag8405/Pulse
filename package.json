@@ -11,7 +11,7 @@
     "test:e2e": "playwright test",
     "test:all": "pnpm test:coverage && pnpm test:e2e",
     "typecheck": "tsc --noEmit",
-    "lint": "next lint",
+    "lint": "eslint .",
     "analyze": "ANALYZE=true next build"
   },
   "dependencies": {

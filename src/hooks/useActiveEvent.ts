@@ -25,9 +25,6 @@ export function useActiveEvent(): UseActiveEventResult {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setLoading(true);
-    setError(null);
-
     const activeEventQuery = query(
       eventsCollection,
       where("status", "in", ["live", "halftime"]),
