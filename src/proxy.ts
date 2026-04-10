@@ -32,7 +32,7 @@ function withSecurityHeaders(response: NextResponse): NextResponse {
   return response;
 }
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   const hasSessionCookie = Boolean(request.cookies.get("__session")?.value);
 
