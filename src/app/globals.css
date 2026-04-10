@@ -76,6 +76,15 @@
   box-shadow: var(--nb-shadow);
 }
 
+.nb-card-interactive {
+  transition: transform 100ms, box-shadow 100ms;
+}
+
+.nb-card-interactive:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: var(--nb-shadow-lg);
+}
+
 .nb-btn {
   box-shadow: var(--nb-shadow-sm);
   transition: transform 100ms, box-shadow 100ms;
@@ -89,6 +98,51 @@
 .nb-btn:active {
   transform: translate(2px, 2px);
   box-shadow: none;
+}
+
+.nb-shake-critical {
+  animation: nb-shake 350ms linear infinite;
+}
+
+.nb-target-ring {
+  animation: nb-target-ring 1.2s ease-in-out infinite;
+}
+
+@keyframes nb-shake {
+  0% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-2px);
+  }
+  50% {
+    transform: translateX(2px);
+  }
+  75% {
+    transform: translateX(-2px);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
+@keyframes nb-target-ring {
+  0% {
+    opacity: 0.95;
+  }
+  50% {
+    opacity: 0.45;
+  }
+  100% {
+    opacity: 0.95;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nb-shake-critical,
+  .nb-target-ring {
+    animation: none;
+  }
 }
 
 /* ── Font variables (set in layout.tsx via next/font) ─────────────────── */

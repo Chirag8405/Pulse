@@ -4,6 +4,7 @@ import { ThemeProvider } from "next-themes";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import { ReactQueryProvider } from "@/components/shared/ReactQueryProvider";
+import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { APP_NAME, APP_TAGLINE } from "@/constants";
 import "./globals.css";
 
@@ -59,6 +60,9 @@ export default function RootLayout({
         >
           <ReactQueryProvider>
             <TooltipProvider>
+              <div className="fixed right-4 top-4 z-50">
+                <ThemeToggle />
+              </div>
               {children}
               <Toaster richColors closeButton />
             </TooltipProvider>
