@@ -1,0 +1,14 @@
+node_modules
+.next
+.git
+.env.local
+coverage
+e2e
+__tests__
+*.test.ts
+*.spec.ts
+*.test.tsx
+*.spec.tsx
+README.md
+.github
+Dockerfile
