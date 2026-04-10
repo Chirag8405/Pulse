@@ -47,6 +47,7 @@ export default function JoinPage() {
 
   const [seatError, setSeatError] = useState<string | null>(null);
   const [isSeatValid, setIsSeatValid] = useState(false);
+  const [hasSubmittedSeatStep, setHasSubmittedSeatStep] = useState(false);
 
   const seatSection = useMemo(() => getSectionFromSeatInput(seatInput), [seatInput]);
 
@@ -91,6 +92,8 @@ export default function JoinPage() {
   }, [seatInput]);
 
   const handleSeatContinue = useCallback(() => {
+    setHasSubmittedSeatStep(true);
+
     const normalized = seatInput.trim().toUpperCase();
     const validation = SeatInputSchema.safeParse(normalized);
 
@@ -110,6 +113,7 @@ export default function JoinPage() {
 
     setSeatInput(normalized);
     setSelectedTeamId(mappedTeam.id);
+    setHasSubmittedSeatStep(false);
     goToNextStep();
   }, [goToNextStep, seatInput, setSeatInput, setSelectedTeamId]);
 
@@ -252,15 +256,25 @@ export default function JoinPage() {
                 </p>
 
                 <div className="relative mt-6">
+                  <label
+                    htmlFor="seat-number-input"
+                    className="mb-2 block text-sm font-bold"
+                  >
+                    Seat number
+                  </label>
                   <input
+                    id="seat-number-input"
                     value={seatInput}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      setHasSubmittedSeatStep(false);
                       setSeatInput(
                         event.target.value.toUpperCase().replace(/\s+/g, "")
-                      )
-                    }
+                      );
+                    }}
                     placeholder="A-12-34"
                     aria-label="Seat number"
+                    aria-invalid={Boolean(seatError)}
+                    aria-describedby={seatError ? "seat-number-error" : undefined}
                     className={cn(
                       "h-14 w-full border-2 px-4 pr-10 font-mono text-lg outline-none",
                       isSeatValid
@@ -280,7 +294,13 @@ export default function JoinPage() {
                 </div>
 
                 {seatError ? (
-                  <p className="mt-2 font-mono text-sm text-red-600">{seatError}</p>
+                  <p
+                    id="seat-number-error"
+                    className="mt-2 font-mono text-sm text-red-600"
+                    aria-live={hasSubmittedSeatStep ? "assertive" : "polite"}
+                  >
+                    {seatError}
+                  </p>
                 ) : null}
 
                 <Button

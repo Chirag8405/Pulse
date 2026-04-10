@@ -29,7 +29,7 @@ export function LeaderboardMini({ rows, yourTeamId }: LeaderboardMiniProps) {
   const topRows = rows.slice(0, 5);
 
   return (
-    <section className="nb-card mt-5 bg-card p-4">
+    <section className="nb-card mt-5 bg-card p-4" role="region" aria-label="Team leaderboard">
       <h3 className="font-mono text-xs font-bold uppercase tracking-widest text-muted-foreground">
         LEADERBOARD
       </h3>
@@ -52,7 +52,10 @@ export function LeaderboardMini({ rows, yourTeamId }: LeaderboardMiniProps) {
                   "bg-foreground text-background dark:bg-background dark:text-foreground"
               )}
             >
-              <span className="font-mono text-xs font-bold">#{index + 1}</span>
+              <span className="font-mono text-xs font-bold" aria-hidden="true">
+                #{index + 1}
+              </span>
+              <span className="sr-only">{index + 1} place, {teamDisplay.name}</span>
               <TeamBadge
                 teamName={teamDisplay.name}
                 emoji={teamDisplay.emoji}

@@ -1,6 +1,13 @@
 "use client";
 
-import { type FormEvent, useMemo, useState } from "react";
+import {
+  Fragment,
+  type FormEvent,
+  type KeyboardEvent,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Timestamp, addDoc, doc, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
 import { AlertTriangle, Bot, RefreshCcw, Sparkles } from "lucide-react";
 import { toast } from "sonner";
@@ -128,6 +135,8 @@ function AdminChallengesContent() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isEndingChallenge, setIsEndingChallenge] = useState(false);
   const [confirmEndOpen, setConfirmEndOpen] = useState(false);
+  const [expandedTeamId, setExpandedTeamId] = useState<string | null>(null);
+  const progressRowRefs = useRef<Array<HTMLTableRowElement | null>>([]);
 
   const historicalSpreadScores = useMemo(() => {
     return challengesFeed
@@ -354,6 +363,37 @@ function AdminChallengesContent() {
     }
   };
 
+  const focusProgressRow = (index: number) => {
+    const target = progressRowRefs.current[index];
+
+    if (target) {
+      target.focus();
+    }
+  };
+
+  const handleProgressRowKeyDown = (index: number, teamId: string) => {
+    return (event: KeyboardEvent<HTMLTableRowElement>) => {
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        focusProgressRow(Math.min(leaderboardRows.length - 1, index + 1));
+        return;
+      }
+
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        focusProgressRow(Math.max(0, index - 1));
+        return;
+      }
+
+      if (event.key === "Enter") {
+        event.preventDefault();
+        setExpandedTeamId((currentTeamId) =>
+          currentTeamId === teamId ? null : teamId
+        );
+      }
+    };
+  };
+
   return (
     <section className="space-y-4">
       <header>
@@ -444,6 +484,8 @@ function AdminChallengesContent() {
               <Input
                 id="challenge-title"
                 value={formValues.title}
+                aria-invalid={Boolean(formErrors.title)}
+                aria-describedby="challenge-title-error challenge-title-count"
                 maxLength={80}
                 onChange={(changeEvent) =>
                   setFormValues((currentValues) => ({
@@ -454,8 +496,12 @@ function AdminChallengesContent() {
                 className="rounded-none border-2 border-border"
               />
               <div className="mt-1 flex items-center justify-between font-mono text-xs">
-                <span className="text-destructive">{formErrors.title}</span>
-                <span className="text-muted-foreground">{formValues.title.length}/80</span>
+                <span id="challenge-title-error" className="text-destructive" aria-live="assertive">
+                  {formErrors.title}
+                </span>
+                <span id="challenge-title-count" className="text-muted-foreground">
+                  {formValues.title.length}/80
+                </span>
               </div>
             </div>
 
@@ -466,6 +512,8 @@ function AdminChallengesContent() {
               <Textarea
                 id="challenge-description"
                 value={formValues.description}
+                aria-invalid={Boolean(formErrors.description)}
+                aria-describedby="challenge-description-error challenge-description-count"
                 maxLength={200}
                 onChange={(changeEvent) =>
                   setFormValues((currentValues) => ({
@@ -476,18 +524,31 @@ function AdminChallengesContent() {
                 className="min-h-24 rounded-none border-2 border-border"
               />
               <div className="mt-1 flex items-center justify-between font-mono text-xs">
-                <span className="text-destructive">{formErrors.description}</span>
-                <span className="text-muted-foreground">{formValues.description.length}/200</span>
+                <span
+                  id="challenge-description-error"
+                  className="text-destructive"
+                  aria-live="assertive"
+                >
+                  {formErrors.description}
+                </span>
+                <span id="challenge-description-count" className="text-muted-foreground">
+                  {formValues.description.length}/200
+                </span>
               </div>
             </div>
 
             <div>
-              <p className="mb-1 text-sm font-bold">Target Spread %</p>
+              <label className="mb-1 block text-sm font-bold" htmlFor="challenge-target-spread">
+                Target Spread %
+              </label>
               <div className="flex items-center gap-3">
                 <Slider
+                  id="challenge-target-spread"
                   min={50}
                   max={90}
                   step={1}
+                  aria-describedby="challenge-target-spread-error"
+                  aria-invalid={Boolean(formErrors.targetSpreadPercentage)}
                   value={[formValues.targetSpreadPercentage]}
                   onValueChange={(values) => {
                     const nextValue = Array.isArray(values) ? values[0] : values;
@@ -504,12 +565,23 @@ function AdminChallengesContent() {
                 />
                 <span className="font-mono text-lg font-black">{formValues.targetSpreadPercentage}%</span>
               </div>
-              <p className="mt-1 font-mono text-xs text-destructive">{formErrors.targetSpreadPercentage}</p>
+              <p
+                id="challenge-target-spread-error"
+                className="mt-1 font-mono text-xs text-destructive"
+                aria-live="assertive"
+              >
+                {formErrors.targetSpreadPercentage}
+              </p>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <p className="mb-1 text-sm font-bold">Target Zone Count</p>
+                <label
+                  className="mb-1 block text-sm font-bold"
+                  htmlFor="challenge-target-zone-count"
+                >
+                  Target Zone Count
+                </label>
                 <Select
                   value={String(formValues.targetZoneCount)}
                   onValueChange={(value) =>
@@ -519,7 +591,12 @@ function AdminChallengesContent() {
                     }))
                   }
                 >
-                  <SelectTrigger className="w-full rounded-none border-2 border-border">
+                  <SelectTrigger
+                    id="challenge-target-zone-count"
+                    className="w-full rounded-none border-2 border-border"
+                    aria-describedby="challenge-target-zone-count-error"
+                    aria-invalid={Boolean(formErrors.targetZoneCount)}
+                  >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="rounded-none border-2 border-border">
@@ -530,11 +607,19 @@ function AdminChallengesContent() {
                     ))}
                   </SelectContent>
                 </Select>
-                <p className="mt-1 font-mono text-xs text-destructive">{formErrors.targetZoneCount}</p>
+                <p
+                  id="challenge-target-zone-count-error"
+                  className="mt-1 font-mono text-xs text-destructive"
+                  aria-live="assertive"
+                >
+                  {formErrors.targetZoneCount}
+                </p>
               </div>
 
               <div>
-                <p className="mb-1 text-sm font-bold">Duration</p>
+                <label className="mb-1 block text-sm font-bold" htmlFor="challenge-duration">
+                  Duration
+                </label>
                 <Select
                   value={String(formValues.durationMinutes)}
                   onValueChange={(value) =>
@@ -544,7 +629,12 @@ function AdminChallengesContent() {
                     }))
                   }
                 >
-                  <SelectTrigger className="w-full rounded-none border-2 border-border">
+                  <SelectTrigger
+                    id="challenge-duration"
+                    className="w-full rounded-none border-2 border-border"
+                    aria-describedby="challenge-duration-error"
+                    aria-invalid={Boolean(formErrors.durationMinutes)}
+                  >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="rounded-none border-2 border-border">
@@ -555,13 +645,21 @@ function AdminChallengesContent() {
                     ))}
                   </SelectContent>
                 </Select>
-                <p className="mt-1 font-mono text-xs text-destructive">{formErrors.durationMinutes}</p>
+                <p
+                  id="challenge-duration-error"
+                  className="mt-1 font-mono text-xs text-destructive"
+                  aria-live="assertive"
+                >
+                  {formErrors.durationMinutes}
+                </p>
               </div>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <p className="mb-1 text-sm font-bold">Reward Type</p>
+                <label className="mb-1 block text-sm font-bold" htmlFor="challenge-reward-type">
+                  Reward Type
+                </label>
                 <Select
                   value={formValues.rewardType}
                   onValueChange={(value) =>
@@ -571,7 +669,12 @@ function AdminChallengesContent() {
                     }))
                   }
                 >
-                  <SelectTrigger className="w-full rounded-none border-2 border-border">
+                  <SelectTrigger
+                    id="challenge-reward-type"
+                    className="w-full rounded-none border-2 border-border"
+                    aria-describedby="challenge-reward-type-error"
+                    aria-invalid={Boolean(formErrors.rewardType)}
+                  >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="rounded-none border-2 border-border">
@@ -582,7 +685,13 @@ function AdminChallengesContent() {
                     ))}
                   </SelectContent>
                 </Select>
-                <p className="mt-1 font-mono text-xs text-destructive">{formErrors.rewardType}</p>
+                <p
+                  id="challenge-reward-type-error"
+                  className="mt-1 font-mono text-xs text-destructive"
+                  aria-live="assertive"
+                >
+                  {formErrors.rewardType}
+                </p>
               </div>
 
               <div>
@@ -592,6 +701,8 @@ function AdminChallengesContent() {
                 <Input
                   id="reward-description"
                   value={formValues.rewardDescription}
+                  aria-invalid={Boolean(formErrors.rewardDescription)}
+                  aria-describedby="reward-description-error"
                   onChange={(changeEvent) =>
                     setFormValues((currentValues) => ({
                       ...currentValues,
@@ -600,7 +711,13 @@ function AdminChallengesContent() {
                   }
                   className="rounded-none border-2 border-border"
                 />
-                <p className="mt-1 font-mono text-xs text-destructive">{formErrors.rewardDescription}</p>
+                <p
+                  id="reward-description-error"
+                  className="mt-1 font-mono text-xs text-destructive"
+                  aria-live="assertive"
+                >
+                  {formErrors.rewardDescription}
+                </p>
               </div>
             </div>
 
@@ -655,7 +772,7 @@ function AdminChallengesContent() {
                 </Badge>
               </div>
 
-              <Table>
+              <Table aria-label="Challenge team progress table">
                 <TableHeader>
                   <TableRow>
                     <TableHead>Team</TableHead>
@@ -665,24 +782,50 @@ function AdminChallengesContent() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {leaderboardRows.map((row) => (
-                    <TableRow key={`${row.teamId}-${row.challengeId}`}>
-                      <TableCell className="font-bold">{getTeamName(row.teamId)}</TableCell>
-                      <TableCell className="font-mono">{Math.round(row.spreadScore)}%</TableCell>
-                      <TableCell>
-                        <Badge
-                          className={
-                            row.isCompleted
-                              ? "rounded-none border-2 border-border bg-emerald-500 px-2 py-1 text-xs font-bold text-white"
-                              : "rounded-none border-2 border-border bg-amber-400 px-2 py-1 text-xs font-bold text-foreground"
-                          }
+                  {leaderboardRows.map((row, index) => {
+                    const rowKey = `${row.teamId}-${row.challengeId}`;
+                    const isExpanded = expandedTeamId === row.teamId;
+
+                    return (
+                      <Fragment key={rowKey}>
+                        <TableRow
+                          tabIndex={0}
+                          ref={(element) => {
+                            progressRowRefs.current[index] = element;
+                          }}
+                          onKeyDown={handleProgressRowKeyDown(index, row.teamId)}
+                          aria-expanded={isExpanded}
                         >
-                          {row.isCompleted ? "Completed" : "In Progress"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="font-mono">{row.memberCount}</TableCell>
-                    </TableRow>
-                  ))}
+                          <TableCell className="font-bold">{getTeamName(row.teamId)}</TableCell>
+                          <TableCell className="font-mono">{Math.round(row.spreadScore)}%</TableCell>
+                          <TableCell>
+                            <Badge
+                              className={
+                                row.isCompleted
+                                  ? "rounded-none border-2 border-border bg-emerald-500 px-2 py-1 text-xs font-bold text-white"
+                                  : "rounded-none border-2 border-border bg-amber-400 px-2 py-1 text-xs font-bold text-foreground"
+                              }
+                            >
+                              {row.isCompleted ? "Completed" : "In Progress"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="font-mono">{row.memberCount}</TableCell>
+                        </TableRow>
+
+                        {isExpanded ? (
+                          <TableRow>
+                            <TableCell colSpan={4} className="bg-muted px-3 py-3 text-sm">
+                              <p className="font-bold">{getTeamName(row.teamId)} details</p>
+                              <p className="mt-1 font-mono text-xs text-muted-foreground">
+                                Spread score {Math.round(row.spreadScore)}%, {row.memberCount} active
+                                members, {row.activeZones.length} active zones.
+                              </p>
+                            </TableCell>
+                          </TableRow>
+                        ) : null}
+                      </Fragment>
+                    );
+                  })}
                 </TableBody>
               </Table>
 

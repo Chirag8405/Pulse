@@ -304,6 +304,8 @@ function DashboardContent() {
 
   return (
     <div className="space-y-5">
+      <h1 className="sr-only">Attendee dashboard</h1>
+
       <EventStatusBar event={activeEvent} />
 
       <div className="grid gap-4 lg:grid-cols-[3fr_2fr]">

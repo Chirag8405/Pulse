@@ -70,6 +70,31 @@ test("Back button returns to previous step", async ({ page }) => {
   await expect(page.getByText("Step 1 of 3")).toBeVisible();
 });
 
+test("Escape key returns to previous onboarding step", async ({ page }) => {
+  await goToRevealStep(page);
+
+  await page.keyboard.press("Escape");
+
+  await expect(
+    page.getByRole("heading", { name: "Enter your seat number" })
+  ).toBeVisible();
+  await expect(page.getByText("Step 1 of 3")).toBeVisible();
+});
+
+test("Tab order advances from seat field to continue button", async ({ page }) => {
+  await page.goto("/join");
+
+  const continueButton = page.getByRole("button", { name: "Continue" });
+
+  await page.getByLabel("Seat number").fill("A-12-34");
+  await expect(continueButton).toBeEnabled();
+
+  await page.getByLabel("Seat number").focus();
+  await page.keyboard.press("Tab");
+
+  await expect(continueButton).toBeFocused();
+});
+
 test("Enter the Arena navigates to /dashboard", async ({ page }) => {
   await goToRevealStep(page);
   await page.getByRole("button", { name: "Join This Team" }).click();

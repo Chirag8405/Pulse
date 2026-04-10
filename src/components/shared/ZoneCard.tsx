@@ -1,5 +1,6 @@
 "use client";
 
+import type { KeyboardEventHandler, Ref } from "react";
 import { MapPin } from "lucide-react";
 import { SpreadMeter } from "@/components/shared/SpreadMeter";
 import { cn } from "@/lib/utils";
@@ -12,6 +13,8 @@ interface ZoneCardProps {
   isTarget: boolean;
   isCurrentUserHere: boolean;
   onClick: () => void;
+  onKeyDown?: KeyboardEventHandler<HTMLButtonElement>;
+  buttonRef?: Ref<HTMLButtonElement>;
 }
 
 export function ZoneCard({
@@ -21,6 +24,8 @@ export function ZoneCard({
   isTarget,
   isCurrentUserHere,
   onClick,
+  onKeyDown,
+  buttonRef,
 }: ZoneCardProps) {
   const spreadValue =
     totalTeamMembers > 0 ? Math.round((memberCount / totalTeamMembers) * 100) : 0;
@@ -29,8 +34,10 @@ export function ZoneCard({
     <button
       type="button"
       onClick={onClick}
+      onKeyDown={onKeyDown}
+      ref={buttonRef}
       className={cn(
-        "w-full cursor-pointer border-2 border-border bg-card text-left shadow-[var(--nb-shadow)] transition-transform duration-100 hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[var(--nb-shadow-lg)]",
+        "nb-card nb-card-interactive w-full cursor-pointer bg-card text-left",
         isCurrentUserHere && "border-dashed border-primary"
       )}
     >
@@ -55,11 +62,15 @@ export function ZoneCard({
 
           {isCurrentUserHere ? (
             <span className="inline-flex items-center gap-1 border-2 border-primary bg-accent px-2 py-1 font-mono text-[11px] font-bold text-primary">
-              <MapPin className="size-3" />
+              <MapPin className="size-3" aria-hidden="true" />
               You
             </span>
           ) : null}
         </div>
+
+        {isTarget ? (
+          <span className="sr-only">, this is a target zone for the current challenge</span>
+        ) : null}
       </div>
 
       <div className="space-y-3 px-4 py-4">

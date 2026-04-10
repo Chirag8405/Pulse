@@ -1,7 +1,6 @@
 "use client";
 
-import { useMemo, useRef } from "react";
-import { useVirtualizer } from "@tanstack/react-virtual";
+import { useMemo } from "react";
 import { Trophy } from "lucide-react";
 import { AuthGuard } from "@/components/layout/AuthGuard";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -27,9 +26,6 @@ interface LeaderboardRowData {
   sparkline: number[];
 }
 
-const TABLE_COLUMNS_CLASS =
-  "grid grid-cols-[72px_minmax(220px,1fr)_190px_140px] items-center gap-2";
-
 function getRankLabel(rank: number): string {
   if (rank === 1) {
     return "🥇";
@@ -41,6 +37,21 @@ function getRankLabel(rank: number): string {
     return "🥉";
   }
   return String(rank);
+}
+
+function getRankAnnouncement(rank: number, teamName: string): string {
+  const mod10 = rank % 10;
+  const mod100 = rank % 100;
+  const suffix =
+    mod10 === 1 && mod100 !== 11
+      ? "st"
+      : mod10 === 2 && mod100 !== 12
+        ? "nd"
+        : mod10 === 3 && mod100 !== 13
+          ? "rd"
+          : "th";
+
+  return `${rank}${suffix} place, ${teamName}`;
 }
 
 function createSparkline(score: number, seed: number): number[] {
@@ -137,32 +148,39 @@ function DesktopLeaderboardRow({
   isYourTeam: boolean;
 }) {
   return (
-    <div
+    <tr
       className={cn(
-        `${TABLE_COLUMNS_CLASS} border-b border-border px-3 py-2 border-l-2 border-l-transparent hover:border-l-primary`,
+        "border-b border-border align-middle",
         rank % 2 === 0
           ? "bg-white text-black dark:bg-zinc-950 dark:text-foreground"
           : "bg-zinc-50 text-black dark:bg-zinc-900 dark:text-foreground",
-        isYourTeam && "border-2 border-black shadow-[var(--nb-shadow-sm)]"
+        isYourTeam && "outline-2 outline-black"
       )}
     >
-      <span className="font-mono text-sm font-bold">{getRankLabel(rank)}</span>
-      <TeamBadge
-        teamName={row.teamName}
-        emoji={row.teamEmoji}
-        colorHex={row.teamColorHex}
-        size="sm"
-      />
-      <span className="inline-flex items-center gap-2 font-mono text-sm font-bold">
-        {row.spreadScore}%
-        <MiniSparkline values={row.sparkline} />
-      </span>
-      <Badge
-        className="rounded-none border-2 border-border bg-muted px-2 py-1 text-xs font-bold text-foreground"
-      >
-        {row.challengesWon}
-      </Badge>
-    </div>
+      <th scope="row" className="px-3 py-2 text-left font-mono text-sm font-bold">
+        <span aria-hidden="true">{getRankLabel(rank)}</span>
+        <span className="sr-only">{getRankAnnouncement(rank, row.teamName)}</span>
+      </th>
+      <td className="px-3 py-2">
+        <TeamBadge
+          teamName={row.teamName}
+          emoji={row.teamEmoji}
+          colorHex={row.teamColorHex}
+          size="sm"
+        />
+      </td>
+      <td className="px-3 py-2 font-mono text-sm font-bold">
+        <span className="inline-flex items-center gap-2">
+          {row.spreadScore}%
+          <MiniSparkline values={row.sparkline} />
+        </span>
+      </td>
+      <td className="px-3 py-2">
+        <Badge className="rounded-none border-2 border-border bg-muted px-2 py-1 text-xs font-bold text-foreground">
+          {row.challengesWon}
+        </Badge>
+      </td>
+    </tr>
   );
 }
 
@@ -183,10 +201,11 @@ function MobileLeaderboardCard({
       )}
     >
       <div className="flex items-center justify-between">
-        <span className="font-mono text-sm font-bold">{getRankLabel(rank)}</span>
-        <Badge
-          className="rounded-none border-2 border-border bg-muted px-2 py-1 text-xs font-bold text-foreground"
-        >
+        <span className="font-mono text-sm font-bold" aria-hidden="true">
+          {getRankLabel(rank)}
+        </span>
+        <span className="sr-only">{getRankAnnouncement(rank, row.teamName)}</span>
+        <Badge className="rounded-none border-2 border-border bg-muted px-2 py-1 text-xs font-bold text-foreground">
           {row.challengesWon} won
         </Badge>
       </div>
@@ -208,24 +227,27 @@ function MobileLeaderboardCard({
 
 function LeaderboardSkeletonRows() {
   return (
-    <section className="nb-card overflow-hidden bg-card">
-      <div className={`${TABLE_COLUMNS_CLASS} bg-black px-3 py-3 text-xs font-bold uppercase tracking-wider text-white`}>
-        <span>Rank</span>
-        <span>Team</span>
-        <span>Spread Score</span>
-        <span>Challenges Won</span>
-      </div>
-      {Array.from({ length: 8 }, (_, index) => (
-        <div
-          key={index}
-          className={`${TABLE_COLUMNS_CLASS} border-b border-border px-3 py-2`}
-        >
-          <div className="h-4 w-8 animate-pulse bg-muted" />
-          <div className="h-6 w-48 animate-pulse bg-muted" />
-          <div className="h-4 w-28 animate-pulse bg-muted" />
-          <div className="h-5 w-12 animate-pulse bg-muted" />
-        </div>
-      ))}
+    <section className="nb-card overflow-hidden bg-card" aria-busy="true" role="status">
+      <table className="w-full" aria-label="Team leaderboard table loading">
+        <thead className="bg-black text-xs font-bold uppercase tracking-wider text-white">
+          <tr>
+            <th scope="col" className="px-3 py-3 text-left">Rank</th>
+            <th scope="col" className="px-3 py-3 text-left">Team</th>
+            <th scope="col" className="px-3 py-3 text-left">Spread Score</th>
+            <th scope="col" className="px-3 py-3 text-left">Challenges Won</th>
+          </tr>
+        </thead>
+        <tbody>
+          {Array.from({ length: 8 }, (_, index) => (
+            <tr key={index} className="border-b border-border">
+              <td className="px-3 py-2"><div className="h-4 w-8 animate-pulse bg-muted" /></td>
+              <td className="px-3 py-2"><div className="h-6 w-48 animate-pulse bg-muted" /></td>
+              <td className="px-3 py-2"><div className="h-4 w-28 animate-pulse bg-muted" /></td>
+              <td className="px-3 py-2"><div className="h-5 w-12 animate-pulse bg-muted" /></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </section>
   );
 }
@@ -237,58 +259,18 @@ function LeaderboardTable({
   rows: LeaderboardRowData[];
   yourTeamId: string | null;
 }) {
-  const shouldVirtualize = rows.length > 50;
-  const scrollParentRef = useRef<HTMLDivElement>(null);
-
-  // TanStack Virtual is intentional here for large lists; React Compiler skips memoizing this hook.
-  // eslint-disable-next-line react-hooks/incompatible-library
-  const rowVirtualizer = useVirtualizer({
-    count: rows.length,
-    getScrollElement: () => scrollParentRef.current,
-    estimateSize: () => 60,
-    overscan: 10,
-  });
-
   return (
     <section className="nb-card overflow-hidden bg-card">
-      <div className={`${TABLE_COLUMNS_CLASS} bg-black px-3 py-3 text-xs font-bold uppercase tracking-wider text-white`}>
-        <span>Rank</span>
-        <span>Team</span>
-        <span>Spread Score</span>
-        <span>Challenges Won</span>
-      </div>
-
-      {shouldVirtualize ? (
-        <div ref={scrollParentRef} className="max-h-[580px] overflow-auto">
-          <div
-            className="relative"
-            style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
-          >
-            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-              const row = rows[virtualRow.index];
-
-              if (!row) {
-                return null;
-              }
-
-              return (
-                <div
-                  key={row.id}
-                  className="absolute left-0 top-0 w-full"
-                  style={{ transform: `translateY(${virtualRow.start}px)` }}
-                >
-                  <DesktopLeaderboardRow
-                    row={row}
-                    rank={virtualRow.index + 1}
-                    isYourTeam={yourTeamId === row.teamId}
-                  />
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ) : (
-        <div>
+      <table className="w-full" aria-label="Team leaderboard table">
+        <thead className="bg-black text-xs font-bold uppercase tracking-wider text-white">
+          <tr>
+            <th scope="col" className="px-3 py-3 text-left">Rank</th>
+            <th scope="col" className="px-3 py-3 text-left">Team</th>
+            <th scope="col" className="px-3 py-3 text-left">Spread Score</th>
+            <th scope="col" className="px-3 py-3 text-left">Challenges Won</th>
+          </tr>
+        </thead>
+        <tbody>
           {rows.map((row, index) => (
             <DesktopLeaderboardRow
               key={row.id}
@@ -297,8 +279,8 @@ function LeaderboardTable({
               isYourTeam={yourTeamId === row.teamId}
             />
           ))}
-        </div>
-      )}
+        </tbody>
+      </table>
     </section>
   );
 }
@@ -366,7 +348,7 @@ function LeaderboardContent() {
   const yourTeamId = firestoreUser?.teamId ?? null;
 
   return (
-    <section className="space-y-4">
+    <section className="space-y-4" role="region" aria-label="Team leaderboard">
       <header>
         <h1 className="text-3xl font-black tracking-tight">Leaderboard</h1>
         <p className="mt-1 text-sm text-muted-foreground">

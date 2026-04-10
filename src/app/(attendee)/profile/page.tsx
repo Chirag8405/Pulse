@@ -341,6 +341,8 @@ function ProfileContent() {
                 <Input
                   id="displayName"
                   value={displayNameInput}
+                  aria-describedby="display-name-status"
+                  aria-invalid={Boolean(nameValidationError)}
                   onChange={(event) => {
                     setDisplayNameDraft(event.target.value);
                     setNameValidationError(null);
@@ -353,7 +355,11 @@ function ProfileContent() {
                 ) : null}
               </div>
 
-              <p className="mt-1 h-5 text-xs font-mono" aria-live="polite">
+              <p
+                id="display-name-status"
+                className="mt-1 h-5 text-xs font-mono"
+                aria-live={nameValidationError ? "assertive" : "polite"}
+              >
                 {nameValidationError ? (
                   <span className="text-destructive">{nameValidationError}</span>
                 ) : saveState === "saved" ? (

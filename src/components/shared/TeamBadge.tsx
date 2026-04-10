@@ -46,8 +46,9 @@ export function TeamBadge({
         style={{ backgroundColor: colorHex }}
         aria-hidden="true"
       />
-      <span>{emoji}</span>
+      <span aria-hidden="true">{emoji}</span>
       <span>{teamName}</span>
+      <span className="sr-only">{teamName} team, {emoji}</span>
     </span>
   );
 }

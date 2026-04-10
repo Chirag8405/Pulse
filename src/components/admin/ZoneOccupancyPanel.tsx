@@ -116,7 +116,7 @@ export function ZoneOccupancyPanel({ countsByZone }: ZoneOccupancyPanelProps) {
   }, [windowSample]);
 
   return (
-    <section className="nb-card bg-card p-4">
+    <section className="nb-card bg-card p-4" role="region" aria-label="Zone occupancy trends">
       <header className="mb-3 flex items-center justify-between gap-3">
         <h3 className="font-mono text-xs font-bold uppercase tracking-widest text-muted-foreground">
           ZONE OCCUPANCY
@@ -147,6 +147,8 @@ export function ZoneOccupancyPanel({ countsByZone }: ZoneOccupancyPanelProps) {
                   )
                 }
                 className="w-full bg-card px-3 py-2 text-left hover:bg-muted/40"
+                aria-expanded={isExpanded}
+                aria-controls={`zone-recommendation-${row.zone.id}`}
               >
                 <div className="mb-2 flex items-center gap-2">
                   <p className="min-w-0 flex-1 truncate text-sm font-bold">{row.zone.name}</p>
@@ -165,7 +167,13 @@ export function ZoneOccupancyPanel({ countsByZone }: ZoneOccupancyPanelProps) {
                   </div>
                 </div>
 
-                <div className="mb-1 h-3 w-full border-2 border-border bg-muted">
+                <div
+                  className="mb-1 h-3 w-full border-2 border-border bg-muted"
+                  role="progressbar"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={Math.round(row.utilization * 100)}
+                >
                   <div
                     className={cn("h-full", getUtilizationTone(row.utilization))}
                     style={{ width: `${Math.max(4, Math.min(100, Math.round(row.utilization * 100)))}%` }}
@@ -178,7 +186,10 @@ export function ZoneOccupancyPanel({ countsByZone }: ZoneOccupancyPanelProps) {
               </button>
 
               {isExpanded ? (
-                <div className="border-t-2 border-border bg-amber-50 px-3 py-2 text-xs text-foreground dark:bg-zinc-950">
+                <div
+                  id={`zone-recommendation-${row.zone.id}`}
+                  className="border-t-2 border-border bg-amber-50 px-3 py-2 text-xs text-foreground dark:bg-zinc-950"
+                >
                   <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
                     Gate Recommendation
                   </p>

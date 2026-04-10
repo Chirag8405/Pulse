@@ -237,7 +237,7 @@ function AdminEventsContent() {
       <section className="nb-card bg-card p-4">
         <h2 className="mb-3 text-xl font-black tracking-tight">Events</h2>
 
-        <Table>
+        <Table aria-label="Event management table">
           <TableHeader>
             <TableRow>
               <TableHead>Event</TableHead>

@@ -13,7 +13,7 @@
     --secondary: 251 191 36;
     --secondary-foreground: 13 13 13;
     --muted: 243 244 246;
-    --muted-foreground: 107 114 128;
+    --muted-foreground: 75 85 99;
     --accent: 219 234 254;
     --accent-foreground: 29 78 216;
     --destructive: 220 38 38;
@@ -63,6 +63,12 @@
   * {
     border-color: rgb(var(--border));
   }
+
+  *:focus-visible {
+    outline: 2px solid hsl(var(--primary)) !important;
+    outline-offset: 2px;
+  }
+
   body {
     background-color: rgb(var(--background));
     color: rgb(var(--foreground));
@@ -139,6 +145,19 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .nb-card-interactive:hover {
+    transform: none;
+    box-shadow: var(--nb-shadow);
+  }
+
   .nb-shake-critical,
   .nb-target-ring {
     animation: none;

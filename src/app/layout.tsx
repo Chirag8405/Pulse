@@ -3,6 +3,7 @@ import { Inter, JetBrains_Mono } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
+import { AxeMonitor } from "@/components/shared/AxeMonitor";
 import { ReactQueryProvider } from "@/components/shared/ReactQueryProvider";
 import { APP_NAME, APP_TAGLINE } from "@/constants";
 import "./globals.css";
@@ -59,6 +60,7 @@ export default function RootLayout({
         >
           <ReactQueryProvider>
             <TooltipProvider>
+              {process.env.NODE_ENV === "development" ? <AxeMonitor /> : null}
               {children}
               <Toaster richColors closeButton />
             </TooltipProvider>

@@ -23,7 +23,28 @@ export function CountdownTimer({ endTime, onExpire }: CountdownTimerProps) {
   const [remainingMs, setRemainingMs] = useState(() =>
     Math.max(0, endTime.getTime() - Date.now())
   );
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
   const expiredRef = useRef(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    if (typeof window.matchMedia !== "function") {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const updatePreference = () => setPrefersReducedMotion(mediaQuery.matches);
+
+    updatePreference();
+    mediaQuery.addEventListener("change", updatePreference);
+
+    return () => {
+      mediaQuery.removeEventListener("change", updatePreference);
+    };
+  }, []);
 
   useEffect(() => {
     expiredRef.current = false;
@@ -49,19 +70,36 @@ export function CountdownTimer({ endTime, onExpire }: CountdownTimerProps) {
 
   const remainingSeconds = Math.max(0, Math.floor(remainingMs / 1000));
 
+  const announcement =
+    remainingSeconds === 120
+      ? "2 minutes remaining"
+      : remainingSeconds === 60
+        ? "1 minute remaining"
+        : remainingSeconds === 30
+          ? "30 seconds remaining"
+          : remainingSeconds === 0
+            ? "Challenge timer ended"
+            : "";
+
   return (
-    <p
-      className={cn(
-        "font-mono text-4xl font-black tabular-nums",
-        remainingSeconds < 30
-          ? "text-red-600 nb-shake-critical"
-          : remainingSeconds < 120
-            ? "text-amber-600"
-            : "text-foreground"
-      )}
-      aria-live="polite"
-    >
-      {formatClock(remainingSeconds)}
-    </p>
+    <>
+      <p
+        className={cn(
+          "font-mono text-4xl font-black tabular-nums",
+          remainingSeconds < 30
+            ? cn("text-red-600", !prefersReducedMotion && "nb-shake-critical")
+            : remainingSeconds < 120
+              ? "text-amber-600"
+              : "text-foreground"
+        )}
+        aria-live="off"
+      >
+        {formatClock(remainingSeconds)}
+      </p>
+
+      <span className="sr-only" aria-live="polite" aria-atomic="true">
+        {announcement}
+      </span>
+    </>
   );
 }

@@ -35,6 +35,8 @@ export function SpreadMeter({
       aria-valuenow={Math.round(clampedValue)}
       aria-valuemin={0}
       aria-valuemax={100}
+      aria-live="polite"
+      aria-atomic="true"
       className="w-full"
     >
       <div className="relative mb-2">
@@ -69,6 +71,10 @@ export function SpreadMeter({
       <p className="font-mono text-sm font-bold">
         {label ?? `${Math.round(clampedValue)}% of ${Math.round(clampedTarget)}% target`}
       </p>
+
+      <span className="sr-only">
+        {Math.round(clampedValue)}% of {Math.round(clampedTarget)}% target achieved
+      </span>
     </div>
   );
 }

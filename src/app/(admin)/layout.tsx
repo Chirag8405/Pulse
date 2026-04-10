@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BarChart3,
   CalendarClock,
@@ -49,7 +49,7 @@ function SidebarNav({ pathname, onNavigate }: SidebarNavProps) {
         </p>
       </div>
 
-      <nav className="p-3">
+      <nav className="p-3" role="navigation" aria-label="Main navigation">
         <ul className="space-y-1.5">
           {ADMIN_ITEMS.map((item) => {
             const Icon = item.icon;
@@ -83,11 +83,21 @@ function SidebarNav({ pathname, onNavigate }: SidebarNavProps) {
 export default function AdminLayout({ children }: AdminLayoutProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement | null>(null);
+  const wasMobileOpenRef = useRef(false);
 
   const currentLabel = useMemo(() => {
     const activeItem = ADMIN_ITEMS.find((item) => isActive(pathname, item.href));
     return activeItem?.label ?? "Dashboard";
   }, [pathname]);
+
+  useEffect(() => {
+    if (wasMobileOpenRef.current && !mobileOpen) {
+      menuButtonRef.current?.focus();
+    }
+
+    wasMobileOpenRef.current = mobileOpen;
+  }, [mobileOpen]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -104,6 +114,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                 variant="outline"
                 size="icon"
                 onClick={() => setMobileOpen(true)}
+                ref={menuButtonRef}
                 className="nb-btn rounded-none border-2 border-border bg-card md:hidden"
                 aria-label="Open admin menu"
               >
@@ -128,7 +139,9 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           </div>
         </header>
 
-        <main className="p-4 md:p-6">{children}</main>
+        <main className="p-4 md:p-6" role="main">
+          {children}
+        </main>
       </div>
 
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>

@@ -53,7 +53,11 @@ export function RewardNotification({
   const rewardEmoji = REWARD_EMOJI_MAP[challenge.reward.type] ?? "🎉";
 
   return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-blue-600/95 p-4 backdrop-blur-sm">
+    <div
+      className="fixed inset-0 z-[90] flex items-center justify-center bg-blue-600/95 p-4 backdrop-blur-sm"
+      aria-live="assertive"
+      aria-atomic="true"
+    >
       <section className="nb-card w-full max-w-md bg-card p-6 text-center">
         <p className="text-6xl" aria-hidden="true">
           {rewardEmoji}

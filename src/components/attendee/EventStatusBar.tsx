@@ -18,6 +18,7 @@ export function EventStatusBar({ event }: EventStatusBarProps) {
 
       <span className="inline-flex items-center border-2 border-border bg-red-600 px-2 py-1 font-mono text-xs font-bold uppercase tracking-wide text-white">
         LIVE
+        <span className="sr-only">Event is currently live</span>
       </span>
     </section>
   );
