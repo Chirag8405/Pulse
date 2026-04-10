@@ -803,7 +803,7 @@ function AdminChallengesContent() {
                               className={
                                 row.isCompleted
                                   ? "rounded-none border-2 border-border bg-emerald-500 px-2 py-1 text-xs font-bold text-white"
-                                  : "rounded-none border-2 border-border bg-amber-400 px-2 py-1 text-xs font-bold text-foreground"
+                                  : "rounded-none border-2 border-border bg-amber-400 px-2 py-1 text-xs font-bold text-black"
                               }
                             >
                               {row.isCompleted ? "Completed" : "In Progress"}

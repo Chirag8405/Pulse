@@ -126,7 +126,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             </div>
 
             <div className="flex items-center gap-2">
-              <span className="inline-flex items-center border-2 border-border bg-amber-400 px-2 py-1 font-mono text-xs font-bold uppercase tracking-wide text-foreground">
+              <span className="inline-flex items-center border-2 border-border bg-amber-400 px-2 py-1 font-mono text-xs font-bold uppercase tracking-wide text-black">
                 ADMIN
               </span>
               <ThemeToggle />

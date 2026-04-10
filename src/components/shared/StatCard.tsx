@@ -46,7 +46,7 @@ function StatCardBase({
           <span className="inline-flex h-6 items-center border-2 border-transparent px-2 py-0.5 font-mono text-xs" />
         )}
 
-        <div className="ml-auto flex h-9 w-9 items-center justify-center border-2 border-border bg-amber-400">
+        <div className="ml-auto flex h-9 w-9 items-center justify-center border-2 border-border bg-amber-400 text-black">
           <Icon className="size-4" aria-hidden="true" />
         </div>
       </div>

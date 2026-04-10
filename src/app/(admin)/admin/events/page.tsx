@@ -48,7 +48,7 @@ function getStatusBadgeClass(status: Event["status"]): string {
   }
 
   if (status === "halftime") {
-    return "rounded-none border-2 border-border bg-amber-400 px-2 py-1 text-xs font-bold text-foreground";
+    return "rounded-none border-2 border-border bg-amber-400 px-2 py-1 text-xs font-bold text-black";
   }
 
   if (status === "completed") {

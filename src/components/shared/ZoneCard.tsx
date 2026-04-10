@@ -44,7 +44,7 @@ function ZoneCardBase({
       <div
         className={cn(
           "relative border-b-2 border-border px-4 py-3",
-          isTarget && "bg-amber-400"
+          isTarget && "bg-amber-400 text-black"
         )}
       >
         {isTarget ? (

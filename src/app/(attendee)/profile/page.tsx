@@ -316,7 +316,7 @@ function ProfileContent() {
                     <Badge
                       className={
                         reward.status === "Available"
-                          ? "rounded-none border-2 border-border bg-amber-400 px-2 py-1 text-xs font-bold text-foreground"
+                          ? "rounded-none border-2 border-border bg-amber-400 px-2 py-1 text-xs font-bold text-black"
                           : "rounded-none border-2 border-border bg-muted px-2 py-1 text-xs font-bold text-foreground"
                       }
                     >

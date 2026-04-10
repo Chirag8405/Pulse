@@ -96,7 +96,7 @@ export default function HomePage() {
       <section className="py-14">
         <div className="mx-auto grid w-full max-w-6xl gap-4 px-4 md:grid-cols-2">
           <article className="nb-card bg-card">
-            <header className="border-b-2 border-border bg-amber-400 px-4 py-3">
+            <header className="border-b-2 border-border bg-amber-400 px-4 py-3 text-black">
               <h3 className="text-xl font-black">For Fans</h3>
             </header>
             <div className="space-y-2 px-4 py-4 text-sm">
