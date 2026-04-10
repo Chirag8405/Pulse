@@ -51,6 +51,13 @@ interface MarkerEntry {
   marker: GoogleMarkerLike;
 }
 
+interface HeatmapDataPoint {
+  zoneId: string;
+  lat: number;
+  lng: number;
+  weight: number;
+}
+
 const MAP_CENTER = { lat: 18.9388, lng: 72.8252 };
 const DEFAULT_ZOOM = 17;
 const MIN_ZOOM = 16;
@@ -170,13 +177,13 @@ function createMarkerIcon(
   };
 }
 
-function buildHeatmapPoints(
+function toGoogleHeatmapPoints(
   googleApi: GoogleMapsApi,
-  occupancyData: Record<string, number>
+  heatmapData: HeatmapDataPoint[]
 ) {
-  return ZONES.map((zone) => ({
-    location: new googleApi.maps.LatLng(zone.lat, zone.lng),
-    weight: occupancyData[zone.id] || 0,
+  return heatmapData.map((point) => ({
+    location: new googleApi.maps.LatLng(point.lat, point.lng),
+    weight: point.weight,
   }));
 }
 
@@ -236,6 +243,15 @@ export default function VenueHeatmap({ occupancyData }: VenueHeatmapProps) {
     () => getTopZones(occupancyData, 3),
     [occupancyData]
   );
+
+  const heatmapData = useMemo(() => {
+    return ZONES.map((zone) => ({
+      zoneId: zone.id,
+      lat: zone.lat,
+      lng: zone.lng,
+      weight: occupancyData[zone.id] ?? 0,
+    }));
+  }, [occupancyData]);
 
   const screenReaderZoneData = useMemo(() => {
     return ZONES.map((zone) => {
@@ -303,7 +319,15 @@ export default function VenueHeatmap({ occupancyData }: VenueHeatmapProps) {
         applyThemeStyle(map);
 
         const heatmapLayer = new googleApi.maps.visualization.HeatmapLayer({
-          data: buildHeatmapPoints(googleApi, latestOccupancyRef.current),
+          data: toGoogleHeatmapPoints(
+            googleApi,
+            ZONES.map((zone) => ({
+              zoneId: zone.id,
+              lat: zone.lat,
+              lng: zone.lng,
+              weight: latestOccupancyRef.current[zone.id] ?? 0,
+            }))
+          ),
           radius: 30,
           opacity: 0.7,
           gradient: [
@@ -403,7 +427,7 @@ export default function VenueHeatmap({ occupancyData }: VenueHeatmapProps) {
       return;
     }
 
-    heatmapLayerRef.current.setData(buildHeatmapPoints(googleApi, occupancyData));
+    heatmapLayerRef.current.setData(toGoogleHeatmapPoints(googleApi, heatmapData));
 
     markersRef.current.forEach((entry) => {
       entry.marker.setIcon(
@@ -413,7 +437,7 @@ export default function VenueHeatmap({ occupancyData }: VenueHeatmapProps) {
         )
       );
     });
-  }, [activeTargetZoneIds, occupancyData]);
+  }, [activeTargetZoneIds, heatmapData]);
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {

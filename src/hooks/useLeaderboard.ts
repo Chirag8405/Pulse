@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { subscribeToLeaderboard } from "@/lib/firebase/helpers";
 import type { ChallengeTeamProgress } from "@/types/firebase";
 
@@ -28,6 +28,21 @@ export function useLeaderboard(
     ? `${challengeId}:${Math.max(1, Math.floor(leaderboardLimit))}`
     : null;
 
+  const handleLeaderboardUpdate = useCallback(
+    (leaderboardRows: ChallengeTeamProgress[]) => {
+      if (!key) {
+        return;
+      }
+
+      setSnapshot({
+        key,
+        data: leaderboardRows,
+        error: null,
+      });
+    },
+    [key]
+  );
+
   useEffect(() => {
     if (!challengeId || !key) {
       return;
@@ -36,19 +51,13 @@ export function useLeaderboard(
     const unsubscribe = subscribeToLeaderboard(
       challengeId,
       Math.max(1, Math.floor(leaderboardLimit)),
-      (leaderboardRows) => {
-        setSnapshot({
-          key,
-          data: leaderboardRows,
-          error: null,
-        });
-      }
+      handleLeaderboardUpdate
     );
 
     return () => {
       unsubscribe();
     };
-  }, [challengeId, key, leaderboardLimit]);
+  }, [challengeId, handleLeaderboardUpdate, key, leaderboardLimit]);
 
   if (!challengeId) {
     return { data: [], loading: false, error: null };

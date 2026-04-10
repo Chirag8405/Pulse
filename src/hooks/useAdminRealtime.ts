@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   collectionGroup,
   limit,
@@ -67,6 +67,25 @@ export function useEventsFeed(feedLimit = 30): FeedResult<Event[]> {
     resolved: false,
   });
 
+  const handleSnapshot = useCallback(
+    (snapshot: { docs: Array<{ data: () => Event }> }) => {
+      setState({
+        data: snapshot.docs.map((docSnapshot) => docSnapshot.data()),
+        error: null,
+        resolved: true,
+      });
+    },
+    []
+  );
+
+  const handleSnapshotError = useCallback((snapshotError: unknown) => {
+    setState({
+      data: [],
+      error: getErrorMessage(snapshotError),
+      resolved: true,
+    });
+  }, []);
+
   useEffect(() => {
     const eventsQuery = query(
       eventsCollection,
@@ -76,26 +95,14 @@ export function useEventsFeed(feedLimit = 30): FeedResult<Event[]> {
 
     const unsubscribe = onSnapshot(
       eventsQuery,
-      (snapshot) => {
-        setState({
-          data: snapshot.docs.map((docSnapshot) => docSnapshot.data()),
-          error: null,
-          resolved: true,
-        });
-      },
-      (snapshotError) => {
-        setState({
-          data: [],
-          error: getErrorMessage(snapshotError),
-          resolved: true,
-        });
-      }
+      handleSnapshot,
+      handleSnapshotError
     );
 
     return () => {
       unsubscribe();
     };
-  }, [feedLimit]);
+  }, [feedLimit, handleSnapshot, handleSnapshotError]);
 
   return {
     data: state.data,
@@ -111,6 +118,25 @@ export function useChallengesFeed(feedLimit = 100): FeedResult<Challenge[]> {
     resolved: false,
   });
 
+  const handleSnapshot = useCallback(
+    (snapshot: { docs: Array<{ data: () => Challenge }> }) => {
+      setState({
+        data: snapshot.docs.map((docSnapshot) => docSnapshot.data()),
+        error: null,
+        resolved: true,
+      });
+    },
+    []
+  );
+
+  const handleSnapshotError = useCallback((snapshotError: unknown) => {
+    setState({
+      data: [],
+      error: getErrorMessage(snapshotError),
+      resolved: true,
+    });
+  }, []);
+
   useEffect(() => {
     const challengesQuery = query(
       challengesCollection,
@@ -120,26 +146,14 @@ export function useChallengesFeed(feedLimit = 100): FeedResult<Challenge[]> {
 
     const unsubscribe = onSnapshot(
       challengesQuery,
-      (snapshot) => {
-        setState({
-          data: snapshot.docs.map((docSnapshot) => docSnapshot.data()),
-          error: null,
-          resolved: true,
-        });
-      },
-      (snapshotError) => {
-        setState({
-          data: [],
-          error: getErrorMessage(snapshotError),
-          resolved: true,
-        });
-      }
+      handleSnapshot,
+      handleSnapshotError
     );
 
     return () => {
       unsubscribe();
     };
-  }, [feedLimit]);
+  }, [feedLimit, handleSnapshot, handleSnapshotError]);
 
   return {
     data: state.data,
@@ -158,6 +172,38 @@ export function useTeamsByEvent(
     resolved: false,
   });
 
+  const handleSnapshot = useCallback(
+    (snapshot: { docs: Array<{ data: () => Team }> }) => {
+      if (!eventId) {
+        return;
+      }
+
+      setState({
+        key: eventId,
+        data: snapshot.docs.map((docSnapshot) => docSnapshot.data()),
+        error: null,
+        resolved: true,
+      });
+    },
+    [eventId]
+  );
+
+  const handleSnapshotError = useCallback(
+    (snapshotError: unknown) => {
+      if (!eventId) {
+        return;
+      }
+
+      setState({
+        key: eventId,
+        data: [],
+        error: getErrorMessage(snapshotError),
+        resolved: true,
+      });
+    },
+    [eventId]
+  );
+
   useEffect(() => {
     if (!eventId) {
       return;
@@ -167,28 +213,14 @@ export function useTeamsByEvent(
 
     const unsubscribe = onSnapshot(
       teamsByEventQuery,
-      (snapshot) => {
-        setState({
-          key: eventId,
-          data: snapshot.docs.map((docSnapshot) => docSnapshot.data()),
-          error: null,
-          resolved: true,
-        });
-      },
-      (snapshotError) => {
-        setState({
-          key: eventId,
-          data: [],
-          error: getErrorMessage(snapshotError),
-          resolved: true,
-        });
-      }
+      handleSnapshot,
+      handleSnapshotError
     );
 
     return () => {
       unsubscribe();
     };
-  }, [eventId]);
+  }, [eventId, handleSnapshot, handleSnapshotError]);
 
   if (!eventId) {
     return { data: [], loading: false, error: null };
@@ -214,6 +246,47 @@ export function useZoneOccupancy(): FeedResult<ZoneOccupancyData> {
     resolved: false,
   });
 
+  const handleSnapshot = useCallback(
+    (snapshot: { docs: Array<{ data: () => { zoneId?: string } }> }) => {
+      const nextZoneCounts = buildEmptyZoneCounts();
+
+      snapshot.docs.forEach((docSnapshot) => {
+        const location = docSnapshot.data() as { zoneId?: string };
+        const zoneId = location.zoneId;
+
+        if (!zoneId || !Object.hasOwn(nextZoneCounts, zoneId)) {
+          return;
+        }
+
+        nextZoneCounts[zoneId] = (nextZoneCounts[zoneId] ?? 0) + 1;
+      });
+
+      const totalActiveMembers = Object.values(nextZoneCounts).reduce(
+        (sum, count) => sum + count,
+        0
+      );
+
+      setState({
+        data: {
+          byZone: nextZoneCounts,
+          totalActiveMembers,
+          updatedAtMillis: Date.now(),
+        },
+        error: null,
+        resolved: true,
+      });
+    },
+    []
+  );
+
+  const handleSnapshotError = useCallback((snapshotError: unknown) => {
+    setState((currentState) => ({
+      data: currentState.data,
+      error: getErrorMessage(snapshotError),
+      resolved: true,
+    }));
+  }, []);
+
   useEffect(() => {
     const occupancyQuery = query(
       collectionGroup(db, "memberLocations"),
@@ -222,48 +295,14 @@ export function useZoneOccupancy(): FeedResult<ZoneOccupancyData> {
 
     const unsubscribe = onSnapshot(
       occupancyQuery,
-      (snapshot) => {
-        const nextZoneCounts = buildEmptyZoneCounts();
-
-        snapshot.docs.forEach((docSnapshot) => {
-          const location = docSnapshot.data() as { zoneId?: string };
-          const zoneId = location.zoneId;
-
-          if (!zoneId || !Object.hasOwn(nextZoneCounts, zoneId)) {
-            return;
-          }
-
-          nextZoneCounts[zoneId] = (nextZoneCounts[zoneId] ?? 0) + 1;
-        });
-
-        const totalActiveMembers = Object.values(nextZoneCounts).reduce(
-          (sum, count) => sum + count,
-          0
-        );
-
-        setState({
-          data: {
-            byZone: nextZoneCounts,
-            totalActiveMembers,
-            updatedAtMillis: Date.now(),
-          },
-          error: null,
-          resolved: true,
-        });
-      },
-      (snapshotError) => {
-        setState((currentState) => ({
-          data: currentState.data,
-          error: getErrorMessage(snapshotError),
-          resolved: true,
-        }));
-      }
+      handleSnapshot,
+      handleSnapshotError
     );
 
     return () => {
       unsubscribe();
     };
-  }, []);
+  }, [handleSnapshot, handleSnapshotError]);
 
   const stableData = useMemo(() => state.data, [state.data]);
 

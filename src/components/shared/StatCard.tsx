@@ -1,3 +1,4 @@
+import { memo } from "react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -10,7 +11,7 @@ interface StatCardProps {
   ariaLabel?: string;
 }
 
-export function StatCard({
+function StatCardBase({
   label,
   value,
   delta,
@@ -62,3 +63,5 @@ export function StatCard({
     </section>
   );
 }
+
+export const StatCard = memo(StatCardBase);

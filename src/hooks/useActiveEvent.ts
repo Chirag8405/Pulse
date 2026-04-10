@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { limit, onSnapshot, orderBy, query, where } from "firebase/firestore";
 import { eventsCollection } from "@/lib/firebase/collections";
 import type { Event } from "@/types/firebase";
@@ -24,6 +24,17 @@ export function useActiveEvent(): UseActiveEventResult {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const handleSnapshot = useCallback((snapshot: { docs: Array<{ data: () => Event }> }) => {
+    const eventDocSnapshot = snapshot.docs[0];
+    setData(eventDocSnapshot ? eventDocSnapshot.data() : null);
+    setLoading(false);
+  }, []);
+
+  const handleSnapshotError = useCallback((snapshotError: unknown) => {
+    setError(getErrorMessage(snapshotError));
+    setLoading(false);
+  }, []);
+
   useEffect(() => {
     const activeEventQuery = query(
       eventsCollection,
@@ -34,21 +45,14 @@ export function useActiveEvent(): UseActiveEventResult {
 
     const unsubscribe = onSnapshot(
       activeEventQuery,
-      (snapshot) => {
-        const eventDocSnapshot = snapshot.docs[0];
-        setData(eventDocSnapshot ? eventDocSnapshot.data() : null);
-        setLoading(false);
-      },
-      (snapshotError) => {
-        setError(getErrorMessage(snapshotError));
-        setLoading(false);
-      }
+      handleSnapshot,
+      handleSnapshotError
     );
 
     return () => {
       unsubscribe();
     };
-  }, []);
+  }, [handleSnapshot, handleSnapshotError]);
 
   return { data, loading, error };
 }

@@ -1,24 +1,58 @@
 "use client";
 
 import { useMemo } from "react";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Legend,
-  Line,
-  LineChart,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import dynamic from "next/dynamic";
 import { AuthGuard } from "@/components/layout/AuthGuard";
+import { LoadingSkeleton } from "@/components/shared/LoadingSkeleton";
 import { REWARD_TYPES, ZONES } from "@/constants";
 import { useChallengesFeed, useEventsFeed, useZoneOccupancy } from "@/hooks/useAdminRealtime";
+
+const ResponsiveContainer = dynamic(
+  () => import("recharts").then((module) => module.ResponsiveContainer),
+  { ssr: false }
+);
+const LineChart = dynamic(
+  () => import("recharts").then((module) => module.LineChart),
+  { ssr: false }
+);
+const Line = dynamic(() => import("recharts").then((module) => module.Line), {
+  ssr: false,
+});
+const BarChart = dynamic(
+  () => import("recharts").then((module) => module.BarChart),
+  { ssr: false }
+);
+const Bar = dynamic(() => import("recharts").then((module) => module.Bar), {
+  ssr: false,
+});
+const PieChart = dynamic(
+  () => import("recharts").then((module) => module.PieChart),
+  { ssr: false }
+);
+const Pie = dynamic(() => import("recharts").then((module) => module.Pie), {
+  ssr: false,
+});
+const Cell = dynamic(() => import("recharts").then((module) => module.Cell), {
+  ssr: false,
+});
+const CartesianGrid = dynamic(
+  () => import("recharts").then((module) => module.CartesianGrid),
+  { ssr: false }
+);
+const XAxis = dynamic(() => import("recharts").then((module) => module.XAxis), {
+  ssr: false,
+});
+const YAxis = dynamic(() => import("recharts").then((module) => module.YAxis), {
+  ssr: false,
+});
+const Tooltip = dynamic(
+  () => import("recharts").then((module) => module.Tooltip),
+  { ssr: false }
+);
+const Legend = dynamic(
+  () => import("recharts").then((module) => module.Legend),
+  { ssr: false }
+);
 
 const CHART_PALETTE = [
   "rgb(var(--primary))",
@@ -44,9 +78,19 @@ function truncateLabel(value: string, maxLength = 12): string {
 }
 
 function AdminAnalyticsContent() {
-  const { data: events } = useEventsFeed(60);
-  const { data: challenges } = useChallengesFeed(200);
-  const { data: occupancy } = useZoneOccupancy();
+  const { data: events, loading: eventsLoading, error: eventsError } = useEventsFeed(60);
+  const {
+    data: challenges,
+    loading: challengesLoading,
+    error: challengesError,
+  } = useChallengesFeed(200);
+  const {
+    data: occupancy,
+    loading: occupancyLoading,
+    error: occupancyError,
+  } = useZoneOccupancy();
+
+  const combinedError = eventsError ?? challengesError ?? occupancyError;
 
   const completedChallenges = useMemo(
     () => challenges.filter((challenge) => challenge.status === "completed"),
@@ -107,6 +151,10 @@ function AdminAnalyticsContent() {
       };
     }).filter((entry) => entry.totalCount > 0);
   }, [challenges]);
+
+  if (eventsLoading || challengesLoading || occupancyLoading) {
+    return <LoadingSkeleton variant="admin" />;
+  }
 
   return (
     <section className="space-y-4">
@@ -212,6 +260,12 @@ function AdminAnalyticsContent() {
           </ResponsiveContainer>
         </div>
       </section>
+
+      {combinedError ? (
+        <section className="nb-card border-destructive bg-card p-3">
+          <p className="font-mono text-xs text-destructive">{combinedError}</p>
+        </section>
+      ) : null}
     </section>
   );
 }

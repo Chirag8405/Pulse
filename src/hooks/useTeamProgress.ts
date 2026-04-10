@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { subscribeToTeamProgress } from "@/lib/firebase/helpers";
 import type { ChallengeTeamProgress } from "@/types/firebase";
 
@@ -26,6 +26,21 @@ export function useTeamProgress(
 
   const key = challengeId && teamId ? `${challengeId}:${teamId}` : null;
 
+  const handleTeamProgressUpdate = useCallback(
+    (teamProgress: ChallengeTeamProgress | null) => {
+      if (!key) {
+        return;
+      }
+
+      setSnapshot({
+        key,
+        data: teamProgress,
+        error: null,
+      });
+    },
+    [key]
+  );
+
   useEffect(() => {
     if (!challengeId || !teamId || !key) {
       return;
@@ -34,19 +49,13 @@ export function useTeamProgress(
     const unsubscribe = subscribeToTeamProgress(
       challengeId,
       teamId,
-      (teamProgress) => {
-        setSnapshot({
-          key,
-          data: teamProgress,
-          error: null,
-        });
-      }
+      handleTeamProgressUpdate
     );
 
     return () => {
       unsubscribe();
     };
-  }, [challengeId, key, teamId]);
+  }, [challengeId, handleTeamProgressUpdate, key, teamId]);
 
   if (!key) {
     return { data: null, loading: false, error: null };

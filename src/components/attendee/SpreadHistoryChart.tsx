@@ -1,16 +1,37 @@
 "use client";
 
 import { useMemo } from "react";
+import dynamic from "next/dynamic";
 import { useTheme } from "next-themes";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+
+const ResponsiveContainer = dynamic(
+  () => import("recharts").then((module) => module.ResponsiveContainer),
+  { ssr: false }
+);
+const BarChart = dynamic(
+  () => import("recharts").then((module) => module.BarChart),
+  { ssr: false }
+);
+const CartesianGrid = dynamic(
+  () => import("recharts").then((module) => module.CartesianGrid),
+  { ssr: false }
+);
+const XAxis = dynamic(
+  () => import("recharts").then((module) => module.XAxis),
+  { ssr: false }
+);
+const YAxis = dynamic(
+  () => import("recharts").then((module) => module.YAxis),
+  { ssr: false }
+);
+const Tooltip = dynamic(
+  () => import("recharts").then((module) => module.Tooltip),
+  { ssr: false }
+);
+const Bar = dynamic(
+  () => import("recharts").then((module) => module.Bar),
+  { ssr: false }
+);
 
 interface SpreadHistoryChartProps {
   scores: number[];

@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { cn } from "@/lib/utils";
 
 interface TeamBadgeProps {
@@ -27,7 +28,7 @@ function hexToRgba(hexColor: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-export function TeamBadge({
+function TeamBadgeBase({
   teamName,
   emoji,
   colorHex,
@@ -52,3 +53,5 @@ export function TeamBadge({
     </span>
   );
 }
+
+export const TeamBadge = memo(TeamBadgeBase);

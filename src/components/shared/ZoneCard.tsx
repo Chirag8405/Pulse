@@ -1,6 +1,6 @@
 "use client";
 
-import type { KeyboardEventHandler, Ref } from "react";
+import { memo, type KeyboardEventHandler, type Ref } from "react";
 import { MapPin } from "lucide-react";
 import { SpreadMeter } from "@/components/shared/SpreadMeter";
 import { cn } from "@/lib/utils";
@@ -17,7 +17,7 @@ interface ZoneCardProps {
   buttonRef?: Ref<HTMLButtonElement>;
 }
 
-export function ZoneCard({
+function ZoneCardBase({
   zone,
   memberCount,
   totalTeamMembers,
@@ -83,3 +83,11 @@ export function ZoneCard({
     </button>
   );
 }
+
+export const ZoneCard = memo(ZoneCardBase, (prevProps, nextProps) => {
+  return (
+    prevProps.zone.id === nextProps.zone.id &&
+    prevProps.memberCount === nextProps.memberCount &&
+    prevProps.isTarget === nextProps.isTarget
+  );
+});

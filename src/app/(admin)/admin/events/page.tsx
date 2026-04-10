@@ -6,6 +6,13 @@ import { toast } from "sonner";
 import { AuthGuard } from "@/components/layout/AuthGuard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
   Table,
@@ -57,6 +64,7 @@ function AdminEventsContent() {
   const [formValues, setFormValues] = useState<EventFormValues>(INITIAL_EVENT_FORM);
   const [isCreating, setIsCreating] = useState(false);
   const [updatingEventId, setUpdatingEventId] = useState<string | null>(null);
+  const [eventToEnd, setEventToEnd] = useState<Event | null>(null);
 
   const sortedEvents = useMemo(() => {
     return [...events].sort(
@@ -307,9 +315,7 @@ function AdminEventsContent() {
                         type="button"
                         size="sm"
                         variant="outline"
-                        onClick={() =>
-                          void handleStatusChange(eventItem, "completed", "event_ended")
-                        }
+                        onClick={() => setEventToEnd(eventItem)}
                         disabled={updatingEventId === eventItem.id}
                         className="nb-btn rounded-none border-2 border-red-600 bg-white px-2 py-1 text-xs font-bold text-red-600"
                       >
@@ -330,6 +336,44 @@ function AdminEventsContent() {
           <p className="mt-3 font-mono text-xs text-destructive">{error}</p>
         ) : null}
       </section>
+
+      <Dialog open={Boolean(eventToEnd)} onOpenChange={(open) => !open && setEventToEnd(null)}>
+        <DialogContent className="rounded-none border-2 border-border bg-card p-5" showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle className="text-xl font-black tracking-tight">End event now?</DialogTitle>
+            <DialogDescription>
+              This will mark the selected event as completed for all attendees.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="mt-3 flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full rounded-none border-2 border-border bg-card font-bold"
+              onClick={() => setEventToEnd(null)}
+            >
+              Cancel
+            </Button>
+
+            <Button
+              type="button"
+              className="nb-btn w-full rounded-none border-2 border-red-600 bg-white font-bold text-red-600"
+              onClick={() => {
+                if (!eventToEnd) {
+                  return;
+                }
+
+                void handleStatusChange(eventToEnd, "completed", "event_ended");
+                setEventToEnd(null);
+              }}
+              disabled={Boolean(eventToEnd && updatingEventId === eventToEnd.id)}
+            >
+              Confirm End
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

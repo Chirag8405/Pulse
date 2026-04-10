@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { onSnapshot } from "firebase/firestore";
 import { memberLocationsCollection } from "@/lib/firebase/collections";
 import type { MemberLocation } from "@/types/firebase";
@@ -44,6 +44,49 @@ export function useTeamMemberLocations(
     error: null,
   });
 
+  const handleSnapshot = useCallback(
+    (incomingSnapshot: { docs: Array<{ data: () => MemberLocation }> }) => {
+      if (!teamId) {
+        return;
+      }
+
+      const locationDocs = incomingSnapshot.docs.map((docSnapshot) => docSnapshot.data());
+      const activeLocations = locationDocs.filter((location) => location.isActive);
+
+      const byZone = activeLocations.reduce<Record<string, number>>((acc, location) => {
+        const currentCount = acc[location.zoneId] ?? 0;
+        acc[location.zoneId] = currentCount + 1;
+        return acc;
+      }, {});
+
+      setSnapshot({
+        teamId,
+        data: {
+          byZone,
+          locations: activeLocations,
+          totalActiveMembers: activeLocations.length,
+        },
+        error: null,
+      });
+    },
+    [teamId]
+  );
+
+  const handleSnapshotError = useCallback(
+    (snapshotError: unknown) => {
+      if (!teamId) {
+        return;
+      }
+
+      setSnapshot({
+        teamId,
+        data: INITIAL_DATA,
+        error: getErrorMessage(snapshotError),
+      });
+    },
+    [teamId]
+  );
+
   useEffect(() => {
     if (!teamId) {
       return;
@@ -51,39 +94,14 @@ export function useTeamMemberLocations(
 
     const unsubscribe = onSnapshot(
       memberLocationsCollection(teamId),
-      (snapshot) => {
-        const locationDocs = snapshot.docs.map((docSnapshot) => docSnapshot.data());
-        const activeLocations = locationDocs.filter((location) => location.isActive);
-
-        const byZone = activeLocations.reduce<Record<string, number>>((acc, location) => {
-          const currentCount = acc[location.zoneId] ?? 0;
-          acc[location.zoneId] = currentCount + 1;
-          return acc;
-        }, {});
-
-        setSnapshot({
-          teamId,
-          data: {
-            byZone,
-            locations: activeLocations,
-            totalActiveMembers: activeLocations.length,
-          },
-          error: null,
-        });
-      },
-      (snapshotError) => {
-        setSnapshot({
-          teamId,
-          data: INITIAL_DATA,
-          error: getErrorMessage(snapshotError),
-        });
-      }
+      handleSnapshot,
+      handleSnapshotError
     );
 
     return () => {
       unsubscribe();
     };
-  }, [teamId]);
+  }, [handleSnapshot, handleSnapshotError, teamId]);
 
   if (!teamId) {
     return { data: INITIAL_DATA, loading: false, error: null };

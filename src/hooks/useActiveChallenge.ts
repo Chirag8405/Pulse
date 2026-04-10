@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { limit, onSnapshot, orderBy, query, where } from "firebase/firestore";
 import { challengesCollection } from "@/lib/firebase/collections";
 import type { Challenge } from "@/types/firebase";
@@ -32,6 +32,37 @@ export function useActiveChallenge(
     error: null,
   });
 
+  const handleSnapshot = useCallback(
+    (incomingSnapshot: { docs: Array<{ data: () => Challenge }> }) => {
+      if (!eventId) {
+        return;
+      }
+
+      const challengeDocSnapshot = incomingSnapshot.docs[0];
+      setSnapshot({
+        eventId,
+        data: challengeDocSnapshot ? challengeDocSnapshot.data() : null,
+        error: null,
+      });
+    },
+    [eventId]
+  );
+
+  const handleSnapshotError = useCallback(
+    (snapshotError: unknown) => {
+      if (!eventId) {
+        return;
+      }
+
+      setSnapshot({
+        eventId,
+        data: null,
+        error: getErrorMessage(snapshotError),
+      });
+    },
+    [eventId]
+  );
+
   useEffect(() => {
     if (!eventId) {
       return;
@@ -47,27 +78,14 @@ export function useActiveChallenge(
 
     const unsubscribe = onSnapshot(
       activeChallengeQuery,
-      (snapshot) => {
-        const challengeDocSnapshot = snapshot.docs[0];
-        setSnapshot({
-          eventId,
-          data: challengeDocSnapshot ? challengeDocSnapshot.data() : null,
-          error: null,
-        });
-      },
-      (snapshotError) => {
-        setSnapshot({
-          eventId,
-          data: null,
-          error: getErrorMessage(snapshotError),
-        });
-      }
+      handleSnapshot,
+      handleSnapshotError
     );
 
     return () => {
       unsubscribe();
     };
-  }, [eventId]);
+  }, [eventId, handleSnapshot, handleSnapshotError]);
 
   if (!eventId) {
     return { data: null, loading: false, error: null };

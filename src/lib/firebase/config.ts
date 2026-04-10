@@ -10,7 +10,7 @@ import { getAuth, type Auth } from "firebase/auth";
 const firebaseConfig = {
   apiKey:
     process.env.NEXT_PUBLIC_FIREBASE_API_KEY ||
-    "AIzaSyBOti4mM-6x9WDnZIjIeyEU21OpBXqWBgw",
+    "demo-firebase-api-key",
   authDomain:
     process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ||
     "demo-pulse.firebaseapp.com",
