@@ -8,12 +8,14 @@ interface ActiveChallengeCardProps {
   challenge: Challenge;
   teamProgress: ChallengeTeamProgress | null;
   statusLine: string;
+  previewMode?: boolean;
 }
 
 export function ActiveChallengeCard({
   challenge,
   teamProgress,
   statusLine,
+  previewMode = false,
 }: ActiveChallengeCardProps) {
   const progressValue = Math.max(0, Math.min(100, teamProgress?.spreadScore ?? 0));
 
@@ -23,7 +25,13 @@ export function ActiveChallengeCard({
       <p className="mt-1 text-sm text-muted-foreground">{challenge.description}</p>
 
       <div className="my-5 flex justify-center">
-        <CountdownTimer endTime={challenge.endTime.toDate()} onExpire={() => undefined} />
+        {previewMode ? (
+          <p className="border-2 border-border bg-muted px-3 py-2 font-mono text-2xl font-black">
+            {challenge.durationMinutes}:00
+          </p>
+        ) : (
+          <CountdownTimer endTime={challenge.endTime.toDate()} onExpire={() => undefined} />
+        )}
       </div>
 
       <SpreadMeter value={progressValue} target={challenge.targetSpreadPercentage} />

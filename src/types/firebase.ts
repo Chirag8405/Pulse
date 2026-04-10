@@ -29,6 +29,7 @@ export interface Team {
 
 export interface Event {
   id: string;
+  title?: string;
   venueName: string;
   venueCity: string;
   homeTeam: string;

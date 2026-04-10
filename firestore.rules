@@ -62,6 +62,12 @@ service cloud.firestore {
       }
     }
 
+    match /audit_log/{entryId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin();
+      allow update, delete: if false;
+    }
+
     match /teams/{teamId}/memberLocations/{userId} {
       allow read: if isAuthenticated();
       allow write: if isOwner(userId) &&

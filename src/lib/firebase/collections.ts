@@ -44,6 +44,7 @@ export const eventsCollection = collection(db, "events").withConverter(eventConv
 export const challengesCollection = collection(db, "challenges").withConverter(
   challengeConverter
 );
+export const auditLogCollection = collection(db, "audit_log");
 
 export const userDoc = (uid: string) => doc(usersCollection, uid);
 export const teamDoc = (teamId: string) => doc(teamsCollection, teamId);

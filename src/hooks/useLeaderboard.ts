@@ -11,29 +11,34 @@ interface UseLeaderboardResult {
 }
 
 export function useLeaderboard(
-  challengeId: string | null | undefined
+  challengeId: string | null | undefined,
+  leaderboardLimit = 10
 ): UseLeaderboardResult {
   const [snapshot, setSnapshot] = useState<{
-    challengeId: string | null;
+    key: string | null;
     data: ChallengeTeamProgress[];
     error: string | null;
   }>({
-    challengeId: null,
+    key: null,
     data: [],
     error: null,
   });
 
+  const key = challengeId
+    ? `${challengeId}:${Math.max(1, Math.floor(leaderboardLimit))}`
+    : null;
+
   useEffect(() => {
-    if (!challengeId) {
+    if (!challengeId || !key) {
       return;
     }
 
     const unsubscribe = subscribeToLeaderboard(
       challengeId,
-      10,
+      Math.max(1, Math.floor(leaderboardLimit)),
       (leaderboardRows) => {
         setSnapshot({
-          challengeId,
+          key,
           data: leaderboardRows,
           error: null,
         });
@@ -43,13 +48,13 @@ export function useLeaderboard(
     return () => {
       unsubscribe();
     };
-  }, [challengeId]);
+  }, [challengeId, key, leaderboardLimit]);
 
   if (!challengeId) {
     return { data: [], loading: false, error: null };
   }
 
-  const isResolvedForCurrentChallenge = snapshot.challengeId === challengeId;
+  const isResolvedForCurrentChallenge = snapshot.key === key;
 
   return {
     data: isResolvedForCurrentChallenge ? snapshot.data : [],
