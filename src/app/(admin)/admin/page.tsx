@@ -129,7 +129,7 @@ function AdminOverviewContent() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[3fr_2fr]">
-        <VenueHeatmap countsByZone={occupancy.byZone} />
+        <VenueHeatmap occupancyData={occupancy.byZone} />
         <ZoneOccupancyPanel countsByZone={occupancy.byZone} />
       </div>
 
