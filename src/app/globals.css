@@ -145,6 +145,59 @@
   }
 }
 
+.nb-onboarding-slide-left {
+  animation: nb-onboarding-slide-left 200ms ease;
+}
+
+.nb-onboarding-slide-right {
+  animation: nb-onboarding-slide-right 200ms ease;
+}
+
+.nb-reveal-up {
+  animation: nb-reveal-up 200ms ease;
+}
+
+@keyframes nb-onboarding-slide-left {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes nb-onboarding-slide-right {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes nb-reveal-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nb-onboarding-slide-left,
+  .nb-onboarding-slide-right,
+  .nb-reveal-up {
+    animation: none;
+  }
+}
+
 /* ── Font variables (set in layout.tsx via next/font) ─────────────────── */
 @layer base {
   :root {
