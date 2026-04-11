@@ -95,6 +95,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   }, [pathname]);
 
   const userLabel = user?.email ?? "No signed-in email";
+  const userUidLabel = user?.uid ?? "unknown";
 
   useEffect(() => {
     if (wasMobileOpenRef.current && !mobileOpen) {
@@ -142,7 +143,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                 {isAdmin ? "ADMIN" : "ATTENDEE"}
               </span>
               <span className="hidden border-2 border-border bg-card px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-wide text-muted-foreground lg:inline-flex">
-                {isAdmin ? "admin" : "attendee"}: {userLabel}
+                {isAdmin ? "admin" : "attendee"}: {userLabel} ({userUidLabel})
               </span>
               <ThemeToggle />
               <Avatar className="after:border-2">

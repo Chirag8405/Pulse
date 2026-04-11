@@ -66,6 +66,38 @@ export async function signOut(): Promise<void> {
   clearSessionCookie();
 }
 
+export async function deleteAccount(): Promise<void> {
+  const authClient = requireAuth();
+  const currentUser = authClient.currentUser;
+
+  if (!currentUser) {
+    throw new Error("No signed-in account to delete.");
+  }
+
+  const token = await currentUser.getIdToken(true);
+
+  const response = await fetch("/api/auth/delete-account", {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as
+      | { error?: string }
+      | null;
+    throw new Error(payload?.error ?? "Failed to delete account.");
+  }
+
+  try {
+    await firebaseSignOut(authClient);
+  } finally {
+    clearSessionCookie();
+  }
+}
+
 export function onAuthChange(
   callback: (user: FirebaseUser | null) => void
 ): () => void {

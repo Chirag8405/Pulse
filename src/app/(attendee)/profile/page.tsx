@@ -11,6 +11,7 @@ import {
   Shield,
   Star,
   Target,
+  TriangleAlert,
 } from "lucide-react";
 import { toast } from "sonner";
 import { updateDoc } from "firebase/firestore";
@@ -33,7 +34,7 @@ import { Switch } from "@/components/ui/switch";
 import { TEAM_MAPPINGS } from "@/constants/teams";
 import { useAuth } from "@/hooks/useAuth";
 import { getTeamById } from "@/lib/firebase/helpers";
-import { signOut } from "@/lib/firebase/auth";
+import { deleteAccount, signOut } from "@/lib/firebase/auth";
 import { UserProfileUpdateSchema } from "@/lib/schemas";
 import { userDoc } from "@/lib/firebase/collections";
 import { useAuthStore } from "@/stores/authStore";
@@ -102,6 +103,8 @@ function ProfileContent() {
     return window.localStorage.getItem(LOCATION_PREF_KEY) !== "false";
   });
   const [confirmSignOutOpen, setConfirmSignOutOpen] = useState(false);
+  const [confirmDeleteAccountOpen, setConfirmDeleteAccountOpen] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
 
   const displayNameInput = displayNameDraft ?? sourceDisplayName;
 
@@ -231,6 +234,21 @@ function ProfileContent() {
       router.push("/login");
     } catch (signOutError) {
       toast.error(getErrorMessage(signOutError));
+    }
+  };
+
+  const handleConfirmDeleteAccount = async () => {
+    setDeletingAccount(true);
+
+    try {
+      await deleteAccount();
+      setConfirmDeleteAccountOpen(false);
+      toast.success("Account deleted.");
+      router.replace("/login");
+    } catch (deleteError) {
+      toast.error(getErrorMessage(deleteError));
+    } finally {
+      setDeletingAccount(false);
     }
   };
 
@@ -410,6 +428,15 @@ function ProfileContent() {
             >
               Sign Out
             </Button>
+
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => setConfirmDeleteAccountOpen(true)}
+              className="nb-btn w-full rounded-none border-2 border-destructive font-bold"
+            >
+              Delete Account
+            </Button>
           </div>
         </section>
       </div>
@@ -446,6 +473,52 @@ function ProfileContent() {
           <p className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
             <Shield className="size-3" />
             Your data remains stored securely in your account.
+          </p>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={confirmDeleteAccountOpen} onOpenChange={setConfirmDeleteAccountOpen}>
+        <DialogContent className="rounded-none border-2 border-border bg-card p-5" showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle className="text-xl font-black tracking-tight">Delete account?</DialogTitle>
+            <DialogDescription>
+              This permanently removes your account profile and signs you out immediately.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="mt-3 flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full rounded-none border-2 border-border bg-card font-bold"
+              onClick={() => setConfirmDeleteAccountOpen(false)}
+              disabled={deletingAccount}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              className="nb-btn w-full rounded-none border-2 border-destructive font-bold"
+              disabled={deletingAccount}
+              onClick={() => {
+                void handleConfirmDeleteAccount();
+              }}
+            >
+              {deletingAccount ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                "Delete Account"
+              )}
+            </Button>
+          </div>
+
+          <p className="mt-2 flex items-center gap-1 text-xs text-destructive">
+            <TriangleAlert className="size-3" />
+            This action cannot be undone.
           </p>
         </DialogContent>
       </Dialog>

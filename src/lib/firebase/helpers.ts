@@ -3,6 +3,7 @@ import {
   Timestamp,
   arrayUnion,
   getDoc,
+  getDocFromServer,
   getDocs,
   limit,
   onSnapshot,
@@ -33,9 +34,67 @@ import type {
   User,
 } from "@/types/firebase";
 
+const userSyncInFlight = new Map<string, Promise<User>>();
+
+interface LegacyUserAdminFields {
+  role?: unknown;
+  admin?: unknown;
+  is_admin?: unknown;
+  "is admin"?: unknown;
+  isAdmin?: unknown;
+}
+
+function isAdminLikeValue(value: unknown): boolean {
+  if (value === true) {
+    return true;
+  }
+
+  if (typeof value === "number") {
+    return value === 1;
+  }
+
+  if (typeof value === "string") {
+    const normalizedValue = value.trim().toLowerCase();
+
+    return (
+      normalizedValue === "true" ||
+      normalizedValue === "1" ||
+      normalizedValue === "yes" ||
+      normalizedValue === "admin" ||
+      normalizedValue === "staff"
+    );
+  }
+
+  return false;
+}
+
+function normalizeUserAdminFlag(user: User): User {
+  const legacyFields = user as User & LegacyUserAdminFields;
+
+  const normalizedAdmin =
+    isAdminLikeValue(legacyFields.isAdmin) ||
+    isAdminLikeValue(legacyFields.role) ||
+    isAdminLikeValue(legacyFields.admin) ||
+    isAdminLikeValue(legacyFields.is_admin) ||
+    isAdminLikeValue(legacyFields["is admin"]);
+
+  return {
+    ...user,
+    isAdmin: normalizedAdmin,
+  };
+}
+
 export async function getUserById(uid: string): Promise<User | null> {
-  const snapshot = await getDoc(userDoc(uid));
-  return snapshot.exists() ? snapshot.data() : null;
+  const userReference = userDoc(uid);
+
+  try {
+    const snapshot = await getDocFromServer(userReference);
+    return snapshot.exists() ? normalizeUserAdminFlag(snapshot.data()) : null;
+  } catch {
+    // Fall back to cached lookup if server is temporarily unavailable.
+    const snapshot = await getDoc(userReference);
+    return snapshot.exists() ? normalizeUserAdminFlag(snapshot.data()) : null;
+  }
 }
 
 export async function getTeamById(teamId: string): Promise<Team | null> {
@@ -44,7 +103,7 @@ export async function getTeamById(teamId: string): Promise<Team | null> {
 }
 
 async function bootstrapUserOnServer(firebaseUser: FirebaseUser): Promise<void> {
-  const token = await firebaseUser.getIdToken();
+  const token = await firebaseUser.getIdToken(true);
   const response = await fetch("/api/auth/bootstrap-user", {
     method: "POST",
     headers: {
@@ -62,39 +121,55 @@ async function bootstrapUserOnServer(firebaseUser: FirebaseUser): Promise<void> 
 }
 
 export async function getOrCreateUser(firebaseUser: FirebaseUser): Promise<User> {
-  try {
-    await bootstrapUserOnServer(firebaseUser);
-    const syncedUser = await getUserById(firebaseUser.uid);
+  const existingSync = userSyncInFlight.get(firebaseUser.uid);
 
-    if (syncedUser) {
-      return syncedUser;
+  if (existingSync) {
+    return existingSync;
+  }
+
+  const syncPromise = (async () => {
+    try {
+      await bootstrapUserOnServer(firebaseUser);
+      const syncedUser = await getUserById(firebaseUser.uid);
+
+      if (syncedUser) {
+        return syncedUser;
+      }
+    } catch {
+      // Fallback for local/offline development where API route may be unavailable.
     }
-  } catch {
-    // Fallback for local/offline development where API route may be unavailable.
+
+    const existing = await getUserById(firebaseUser.uid);
+
+    if (existing) {
+      return existing;
+    }
+
+    const newUser: User = {
+      uid: firebaseUser.uid,
+      email: firebaseUser.email,
+      displayName: firebaseUser.displayName,
+      photoURL: firebaseUser.photoURL,
+      teamId: null,
+      venueId: VENUE_NAME,
+      joinedAt: Timestamp.now(),
+      totalPoints: 0,
+      totalChallengesCompleted: 0,
+      isAdmin: false,
+    };
+
+    await setDoc(userDoc(firebaseUser.uid), newUser);
+
+    return newUser;
+  })();
+
+  userSyncInFlight.set(firebaseUser.uid, syncPromise);
+
+  try {
+    return await syncPromise;
+  } finally {
+    userSyncInFlight.delete(firebaseUser.uid);
   }
-
-  const existing = await getUserById(firebaseUser.uid);
-
-  if (existing) {
-    return existing;
-  }
-
-  const newUser: User = {
-    uid: firebaseUser.uid,
-    email: firebaseUser.email,
-    displayName: firebaseUser.displayName,
-    photoURL: firebaseUser.photoURL,
-    teamId: null,
-    venueId: VENUE_NAME,
-    joinedAt: Timestamp.now(),
-    totalPoints: 0,
-    totalChallengesCompleted: 0,
-    isAdmin: false,
-  };
-
-  await setDoc(userDoc(firebaseUser.uid), newUser);
-
-  return newUser;
 }
 
 export async function getActiveEvent(): Promise<Event | null> {

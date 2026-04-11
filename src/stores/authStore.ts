@@ -23,7 +23,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   setFirestoreUser: (firestoreUser) => {
     set({
       firestoreUser,
-      isAdmin: firestoreUser?.isAdmin ?? false,
+      isAdmin: firestoreUser?.isAdmin === true,
     });
   },
   setLoading: (loading) => {

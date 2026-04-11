@@ -15,6 +15,19 @@ interface UserBootstrapDoc {
   isAdmin: boolean;
 }
 
+interface LegacyUserRoleDoc {
+  role?: unknown;
+  admin?: unknown;
+  is_admin?: unknown;
+  "is admin"?: unknown;
+}
+
+interface AdminClaims {
+  admin?: unknown;
+  isAdmin?: unknown;
+  role?: unknown;
+}
+
 const ADMIN_EMAILS = new Set(
   (process.env.ADMIN_EMAILS ?? "")
     .split(",")
@@ -42,6 +55,57 @@ function getBearerToken(request: NextRequest): string | null {
 
 function getNumber(value: unknown, fallback = 0): number {
   return typeof value === "number" ? value : fallback;
+}
+
+function hasAdminRoleValue(value: unknown): boolean {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "number") {
+    return value === 1;
+  }
+
+  if (typeof value === "string") {
+    const normalizedValue = value.trim().toLowerCase();
+
+    return (
+      normalizedValue === "admin" ||
+      normalizedValue === "staff" ||
+      normalizedValue === "true" ||
+      normalizedValue === "1" ||
+      normalizedValue === "yes"
+    );
+  }
+
+  return false;
+}
+
+function hasExistingAdminFlag(existingData: Partial<UserBootstrapDoc> | null): boolean {
+  if (!existingData) {
+    return false;
+  }
+
+  if (hasAdminRoleValue(existingData.isAdmin)) {
+    return true;
+  }
+
+  const legacyData = existingData as LegacyUserRoleDoc;
+
+  return (
+    hasAdminRoleValue(legacyData.role) ||
+    hasAdminRoleValue(legacyData.admin) ||
+    hasAdminRoleValue(legacyData.is_admin) ||
+    hasAdminRoleValue(legacyData["is admin"])
+  );
+}
+
+function hasAdminClaim(decodedToken: AdminClaims): boolean {
+  if (hasAdminRoleValue(decodedToken.admin) || hasAdminRoleValue(decodedToken.isAdmin)) {
+    return true;
+  }
+
+  return hasAdminRoleValue(decodedToken.role);
 }
 
 export async function POST(request: NextRequest) {
@@ -75,8 +139,10 @@ export async function POST(request: NextRequest) {
       firstUserAdmin = adminSnapshot.empty;
     }
 
+    const claimAdmin = hasAdminClaim(decodedToken as AdminClaims);
+
     const isAdmin =
-      Boolean(existingData?.isAdmin) || allowlistedAdmin || firstUserAdmin;
+      hasExistingAdminFlag(existingData) || allowlistedAdmin || firstUserAdmin || claimAdmin;
 
     const payload: UserBootstrapDoc = {
       uid,
