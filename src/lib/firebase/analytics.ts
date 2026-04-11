@@ -1,5 +1,5 @@
 import { logEvent } from "firebase/analytics";
-import { analytics } from "@/lib/firebase/config";
+import { analyticsPromise } from "@/lib/firebase/config";
 
 export type VenueAnalyticsEventName =
   | "event_started"
@@ -14,9 +14,11 @@ export function logVenueAnalyticsEvent(
   eventName: VenueAnalyticsEventName,
   params: AnalyticsParams = {}
 ): void {
-  if (!analytics) {
-    return;
-  }
+  void analyticsPromise.then((analytics) => {
+    if (!analytics) {
+      return;
+    }
 
-  logEvent(analytics, eventName, params);
+    logEvent(analytics, eventName, params);
+  });
 }

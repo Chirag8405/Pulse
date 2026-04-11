@@ -8,14 +8,22 @@ export function AccessDenied() {
         <ShieldOff className="mx-auto mb-4 size-14 text-muted-foreground" />
         <h1 className="text-3xl font-black tracking-tight">Access Denied</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          This area is for venue staff only.
+          This page is for venue staff only. Audience accounts should use the attendee dashboard.
         </p>
-        <Link
-          href="/dashboard"
-          className="nb-btn mt-6 inline-flex w-full items-center justify-center border-2 border-border bg-primary px-4 py-2 font-bold text-primary-foreground"
-        >
-          Back to Dashboard
-        </Link>
+        <div className="mt-6 space-y-2">
+          <Link
+            href="/dashboard"
+            className="nb-btn inline-flex w-full items-center justify-center border-2 border-border bg-primary px-4 py-2 font-bold text-primary-foreground"
+          >
+            Go to Attendee Dashboard
+          </Link>
+          <Link
+            href="/login?redirect=%2Fdashboard"
+            className="nb-btn inline-flex w-full items-center justify-center border-2 border-border bg-muted px-4 py-2 font-bold text-foreground"
+          >
+            Sign In as Audience
+          </Link>
+        </div>
       </section>
     </main>
   );

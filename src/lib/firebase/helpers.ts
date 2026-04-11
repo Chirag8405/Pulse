@@ -43,7 +43,36 @@ export async function getTeamById(teamId: string): Promise<Team | null> {
   return snapshot.exists() ? snapshot.data() : null;
 }
 
+async function bootstrapUserOnServer(firebaseUser: FirebaseUser): Promise<void> {
+  const token = await firebaseUser.getIdToken();
+  const response = await fetch("/api/auth/bootstrap-user", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as
+      | { error?: string }
+      | null;
+    throw new Error(payload?.error ?? "Failed to bootstrap user");
+  }
+}
+
 export async function getOrCreateUser(firebaseUser: FirebaseUser): Promise<User> {
+  try {
+    await bootstrapUserOnServer(firebaseUser);
+    const syncedUser = await getUserById(firebaseUser.uid);
+
+    if (syncedUser) {
+      return syncedUser;
+    }
+  } catch {
+    // Fallback for local/offline development where API route may be unavailable.
+  }
+
   const existing = await getUserById(firebaseUser.uid);
 
   if (existing) {

@@ -1,7 +1,7 @@
 "use client";
 
 import { type FormEvent, useMemo, useState } from "react";
-import { Timestamp, doc, setDoc, updateDoc } from "firebase/firestore";
+import { Timestamp, doc, updateDoc, writeBatch } from "firebase/firestore";
 import { toast } from "sonner";
 import { AuthGuard } from "@/components/layout/AuthGuard";
 import { Badge } from "@/components/ui/badge";
@@ -23,10 +23,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { VENUE_CITY, VENUE_NAME } from "@/constants";
+import { TEAM_MAPPINGS } from "@/constants/teams";
 import { useEventsFeed } from "@/hooks/useAdminRealtime";
 import { logVenueAnalyticsEvent } from "@/lib/firebase/analytics";
-import { eventDoc, eventsCollection } from "@/lib/firebase/collections";
-import type { Event } from "@/types/firebase";
+import { db } from "@/lib/firebase/config";
+import { eventDoc, eventsCollection, teamsCollection } from "@/lib/firebase/collections";
+import type { Event, Team } from "@/types/firebase";
 
 interface EventFormValues {
   title: string;
@@ -41,6 +43,33 @@ const INITIAL_EVENT_FORM: EventFormValues = {
   awayTeam: "",
   startTimeInput: "",
 };
+
+const TEAM_SECTION_IDS: Record<string, string[]> = {
+  "team-north-wolves": ["A", "B"],
+  "team-south-lions": ["C", "D"],
+  "team-east-falcons": ["E", "F"],
+  "team-west-sharks": ["G", "H"],
+  "team-concourse-n-hawks": ["J", "K"],
+  "team-concourse-s-tigers": ["L", "M"],
+  "team-entry-main-rhinos": ["N", "O", "P"],
+  "team-entry-sec-panthers": ["Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"],
+};
+
+function buildTeamsForEvent(eventId: string, now: Timestamp): Team[] {
+  return TEAM_MAPPINGS.map((mapping) => ({
+    id: mapping.id,
+    name: mapping.name,
+    colorHex: mapping.colorHex,
+    emoji: mapping.emoji,
+    venueId: VENUE_NAME,
+    eventId,
+    memberIds: [],
+    currentSpreadScore: 0,
+    lastCalculatedAt: now,
+    totalChallengesWon: 0,
+    sectionIds: TEAM_SECTION_IDS[mapping.id] ?? [],
+  }));
+}
 
 function getStatusBadgeClass(status: Event["status"]): string {
   if (status === "live") {
@@ -97,6 +126,7 @@ function AdminEventsContent() {
     try {
       const eventReference = doc(eventsCollection);
       const startTime = Timestamp.fromDate(parsedStart);
+      const now = Timestamp.now();
 
       const eventPayload: Event = {
         id: eventReference.id,
@@ -111,8 +141,16 @@ function AdminEventsContent() {
         matchDay: parsedStart.toLocaleDateString(),
       };
 
-      await setDoc(eventReference, eventPayload);
-      toast.success("Event created.");
+      const teams = buildTeamsForEvent(eventReference.id, now);
+      const batch = writeBatch(db);
+
+      batch.set(eventReference, eventPayload);
+      teams.forEach((team) => {
+        batch.set(doc(teamsCollection, team.id), team);
+      });
+
+      await batch.commit();
+      toast.success("Event created and teams initialized.");
       setFormValues(INITIAL_EVENT_FORM);
     } catch (createError) {
       const message = createError instanceof Error ? createError.message : "Could not create event.";

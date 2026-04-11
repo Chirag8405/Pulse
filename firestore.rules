@@ -36,7 +36,9 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow read: if isOwner(userId) || isAdmin();
-      allow create: if isOwner(userId);
+      allow create: if isOwner(userId) &&
+        request.resource.data.uid == userId &&
+        request.resource.data.isAdmin == false;
       allow update: if isOwner(userId) &&
         !('isAdmin' in request.resource.data.diff(resource.data).affectedKeys());
       allow delete: if false;

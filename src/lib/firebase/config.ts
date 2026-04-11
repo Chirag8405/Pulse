@@ -1,9 +1,11 @@
 import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
-import { getAnalytics, type Analytics } from "firebase/analytics";
+import { getAnalytics, isSupported, type Analytics } from "firebase/analytics";
 import {
+  type Firestore,
   getFirestore,
-  enableIndexedDbPersistence,
-  type FirestoreError,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentSingleTabManager,
 } from "firebase/firestore";
 import { getAuth, type Auth } from "firebase/auth";
 
@@ -31,20 +33,29 @@ export const app: FirebaseApp = getApps().length
 
 export const auth: Auth | null =
   typeof window !== "undefined" ? getAuth(app) : null;
-export const db = getFirestore(app);
 
-if (typeof window !== "undefined") {
-  void enableIndexedDbPersistence(db).catch((error: FirestoreError) => {
-    if (
-      error.code === "failed-precondition" ||
-      error.code === "unimplemented"
-    ) {
-      return;
-    }
+function createFirestore(): Firestore {
+  if (typeof window === "undefined") {
+    return getFirestore(app);
+  }
 
-    console.error("Failed to enable Firestore offline persistence", error);
-  });
+  try {
+    return initializeFirestore(app, {
+      localCache: persistentLocalCache({
+        tabManager: persistentSingleTabManager(undefined),
+      }),
+    });
+  } catch {
+    // Hot reload can re-enter this module after Firestore has been initialized.
+    return getFirestore(app);
+  }
 }
 
-export const analytics: Analytics | null =
-  typeof window !== "undefined" ? getAnalytics(app) : null;
+export const db: Firestore = createFirestore();
+
+export const analyticsPromise: Promise<Analytics | null> =
+  typeof window === "undefined"
+    ? Promise.resolve(null)
+    : isSupported()
+        .then((supported) => (supported ? getAnalytics(app) : null))
+        .catch(() => null);

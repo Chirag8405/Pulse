@@ -20,7 +20,7 @@ export function EmptyState({
   action,
 }: EmptyStateProps) {
   return (
-    <section className="flex min-h-[320px] items-center justify-center" role="status" aria-live="polite">
+    <div className="flex min-h-[320px] items-center justify-center" role="status" aria-live="polite">
       <div className="w-full max-w-xl border-2 border-dashed border-border bg-card p-12 text-center">
         <Icon className="mx-auto size-12 text-muted-foreground" aria-hidden="true" />
         <h3 className="mt-4 text-lg font-bold">{title}</h3>
@@ -36,6 +36,6 @@ export function EmptyState({
           </Button>
         ) : null}
       </div>
-    </section>
+    </div>
   );
 }

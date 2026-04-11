@@ -227,7 +227,7 @@ function MobileLeaderboardCard({
 
 function LeaderboardSkeletonRows() {
   return (
-    <section className="nb-card overflow-hidden bg-card" aria-busy="true" role="status">
+    <div className="nb-card overflow-hidden bg-card" aria-busy="true" role="status">
       <table className="w-full" aria-label="Team leaderboard table loading">
         <thead className="bg-black text-xs font-bold uppercase tracking-wider text-white">
           <tr>
@@ -248,7 +248,7 @@ function LeaderboardSkeletonRows() {
           ))}
         </tbody>
       </table>
-    </section>
+    </div>
   );
 }
 

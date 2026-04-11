@@ -4,6 +4,7 @@ import {
   onAuthStateChanged,
   signInAnonymously as firebaseSignInAnonymously,
   signInWithPopup,
+  signInWithRedirect,
   signOut as firebaseSignOut,
   type User as FirebaseUser,
 } from "firebase/auth";
@@ -40,16 +41,25 @@ function clearSessionCookie(): void {
   document.cookie = `${SESSION_COOKIE_NAME}=; Path=/; Max-Age=0; SameSite=Lax`;
 }
 
-export async function signInWithGoogle(): Promise<FirebaseUser> {
+export async function signInWithGoogle(): Promise<void> {
   const authClient = requireAuth();
   const provider = new GoogleAuthProvider();
   provider.addScope("profile");
   provider.addScope("email");
 
-  const credential = await signInWithPopup(authClient, provider);
-  setSessionCookie();
+  const isLocalhost =
+    typeof window !== "undefined" &&
+    ["localhost", "127.0.0.1"].includes(window.location.hostname);
 
-  return credential.user;
+  if (isLocalhost) {
+    const credential = await signInWithPopup(authClient, provider);
+    if (credential.user) {
+      setSessionCookie();
+    }
+    return;
+  }
+
+  await signInWithRedirect(authClient, provider);
 }
 
 export async function signInAnonymously(): Promise<FirebaseUser> {

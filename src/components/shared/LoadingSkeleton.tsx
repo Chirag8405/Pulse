@@ -19,7 +19,7 @@ export function LoadingSkeleton({
 
   if (variant === "challenge") {
     return (
-      <section className="w-full border-2 border-border bg-card p-4" aria-busy="true" role="status">
+      <div className="w-full border-2 border-border bg-card p-4" aria-busy="true" role="status">
         <div className="space-y-3">
           <Skeleton className={`h-8 w-40 ${skeletonTone}`} />
           <Skeleton className={`h-16 w-full ${skeletonTone}`} />
@@ -30,13 +30,13 @@ export function LoadingSkeleton({
           </div>
           <Skeleton className={`h-11 w-48 ${skeletonTone}`} />
         </div>
-      </section>
+      </div>
     );
   }
 
   if (variant === "leaderboard") {
     return (
-      <section className="w-full border-2 border-border bg-card p-4" aria-busy="true" role="status">
+      <div className="w-full border-2 border-border bg-card p-4" aria-busy="true" role="status">
         <div className="space-y-3">
           <Skeleton className={`h-8 w-52 ${skeletonTone}`} />
           {Array.from({ length: 5 }, (_, index) => (
@@ -47,13 +47,13 @@ export function LoadingSkeleton({
             </div>
           ))}
         </div>
-      </section>
+      </div>
     );
   }
 
   if (variant === "admin") {
     return (
-      <section className="w-full border-2 border-border bg-card p-4" aria-busy="true" role="status">
+      <div className="w-full border-2 border-border bg-card p-4" aria-busy="true" role="status">
         <div className="space-y-4">
           <Skeleton className={`h-9 w-64 ${skeletonTone}`} />
           <div className="grid gap-3 md:grid-cols-3">
@@ -63,12 +63,15 @@ export function LoadingSkeleton({
           </div>
           <Skeleton className={`h-56 ${skeletonTone}`} />
         </div>
-      </section>
+      </div>
     );
   }
 
   return (
-    <main className="min-h-screen bg-background p-6" aria-busy="true" role="status">
+    <main className="min-h-screen bg-background p-6" aria-busy="true">
+      <div className="sr-only" role="status" aria-live="polite">
+        Loading dashboard
+      </div>
       <section className="mx-auto max-w-5xl border-2 border-border bg-card p-4">
         <div className="space-y-4">
           <Skeleton className={`h-10 w-56 ${skeletonTone}`} />

@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -67,44 +67,62 @@ function LoginFallback() {
 function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, isAdmin, loading } = useAuth();
   const [pendingMethod, setPendingMethod] = useState<PendingMethod>(null);
+  const hasHandledPostLoginRedirect = useRef(false);
 
   const redirectPath = useMemo(() => {
     return searchParams.get("redirect") || "/dashboard";
   }, [searchParams]);
 
+  const isAdminTarget = useMemo(() => {
+    return redirectPath === "/admin" || redirectPath.startsWith("/admin/");
+  }, [redirectPath]);
+
   useEffect(() => {
-    if (!loading && isAuthenticated) {
-      router.push(redirectPath);
+    if (loading || !isAuthenticated || hasHandledPostLoginRedirect.current) {
+      return;
     }
-  }, [isAuthenticated, loading, redirectPath, router]);
+
+    hasHandledPostLoginRedirect.current = true;
+
+    if (isAdminTarget && !isAdmin) {
+      toast("Signed in as attendee", {
+        description:
+          "Your account does not have venue staff access. Redirecting to attendee dashboard.",
+      });
+      router.push("/dashboard");
+      return;
+    }
+
+    router.push(redirectPath);
+  }, [isAdmin, isAdminTarget, isAuthenticated, loading, redirectPath, router]);
 
   const handleGoogleSignIn = useCallback(async () => {
     setPendingMethod("google");
 
     try {
       await signInWithGoogle();
-      router.push(redirectPath);
     } catch (error) {
       toast.error(getErrorMessage(error));
     } finally {
       setPendingMethod(null);
     }
-  }, [redirectPath, router]);
+  }, []);
 
   const handleGuestSignIn = useCallback(async () => {
     setPendingMethod("guest");
 
     try {
       await signInAnonymously();
-      router.push(redirectPath);
+      const guestDestination = isAdminTarget ? "/dashboard" : redirectPath;
+      router.push(guestDestination);
     } catch (error) {
       toast.error(getErrorMessage(error));
     } finally {
       setPendingMethod(null);
     }
-  }, [redirectPath, router]);
+  }, [isAdminTarget, redirectPath, router]);
 
   const isPending = pendingMethod !== null;
 
@@ -122,6 +140,11 @@ function LoginContent() {
           {APP_NAME}
         </h1>
         <p className="mt-1 text-xs text-muted-foreground">{APP_TAGLINE}</p>
+        <p className="mt-3 border-2 border-border bg-muted px-3 py-2 text-xs text-foreground">
+          {isAdminTarget
+            ? "Requested area: Venue Staff. Non-admin accounts are automatically sent to the attendee dashboard."
+            : "Requested area: Attendee."}
+        </p>
 
         <div className="my-5 border-t-2 border-black" />
 
@@ -141,7 +164,7 @@ function LoginContent() {
             ) : (
               <>
                 <GoogleGIcon />
-                Sign in with Google
+                Sign in with Google (Attendee or Staff)
               </>
             )}
           </button>
@@ -156,13 +179,17 @@ function LoginContent() {
             {pendingMethod === "guest" ? (
               <>
                 <Loader2 className="size-4 animate-spin" />
-                Joining as guest...
+                Joining as audience...
               </>
             ) : (
-              "Continue as Guest"
+              "Continue as Audience (Guest)"
             )}
           </button>
         </div>
+
+        <p className="mt-3 text-center text-[11px] text-muted-foreground">
+          Staff access requires your user to have <span className="font-mono">isAdmin=true</span>.
+        </p>
 
         <p className="mt-5 text-center text-[11px] text-muted-foreground">
           By continuing, you agree to venue safety communications during live

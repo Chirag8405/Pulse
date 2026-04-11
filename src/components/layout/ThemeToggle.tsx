@@ -17,7 +17,8 @@ export function ThemeToggle() {
       className="nb-btn rounded-none border-2 border-border bg-card"
       title="Toggle theme"
     >
-      {isDark ? <Sun className="size-4" /> : <Moon className="size-4" />}
+      <Sun className="hidden size-4 dark:block" aria-hidden="true" />
+      <Moon className="size-4 dark:hidden" aria-hidden="true" />
     </Button>
   );
 }
