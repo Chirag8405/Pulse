@@ -181,7 +181,6 @@ export default function JoinPage() {
       return;
     }
 
-    const userId = user.uid;
     const teamId = selectedTeam.id;
 
     setIsJoiningTeam(true);

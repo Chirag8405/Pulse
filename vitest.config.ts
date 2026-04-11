@@ -21,6 +21,8 @@ export default defineConfig({
         "node_modules/**",
         "e2e/**",
         "**/*.config.ts",
+        "src/lib/firebase/**",
+        "src/constants/teams.ts",
         "src/app/showcase/**",
       ],
     },
