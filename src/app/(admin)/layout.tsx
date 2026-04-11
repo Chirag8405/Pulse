@@ -16,6 +16,7 @@ import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 
 interface AdminLayoutProps {
@@ -82,6 +83,7 @@ function SidebarNav({ pathname, onNavigate }: SidebarNavProps) {
 
 export default function AdminLayout({ children }: AdminLayoutProps) {
   const pathname = usePathname();
+  const { user, isAdmin } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement | null>(null);
   const wasMobileOpenRef = useRef(false);
@@ -90,6 +92,8 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     const activeItem = ADMIN_ITEMS.find((item) => isActive(pathname, item.href));
     return activeItem?.label ?? "Dashboard";
   }, [pathname]);
+
+  const userLabel = user?.email ?? "No signed-in email";
 
   useEffect(() => {
     if (wasMobileOpenRef.current && !mobileOpen) {
@@ -128,6 +132,9 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             <div className="flex items-center gap-2">
               <span className="inline-flex items-center border-2 border-border bg-amber-400 px-2 py-1 font-mono text-xs font-bold uppercase tracking-wide text-black">
                 ADMIN
+              </span>
+              <span className="hidden border-2 border-border bg-card px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-wide text-muted-foreground lg:inline-flex">
+                {isAdmin ? "admin" : "attendee"}: {userLabel}
               </span>
               <ThemeToggle />
               <Avatar className="after:border-2">
