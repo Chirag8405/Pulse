@@ -4,7 +4,6 @@ import {
   onAuthStateChanged,
   signInAnonymously as firebaseSignInAnonymously,
   signInWithPopup,
-  signInWithRedirect,
   signOut as firebaseSignOut,
   type User as FirebaseUser,
 } from "firebase/auth";
@@ -47,19 +46,10 @@ export async function signInWithGoogle(): Promise<void> {
   provider.addScope("profile");
   provider.addScope("email");
 
-  const isLocalhost =
-    typeof window !== "undefined" &&
-    ["localhost", "127.0.0.1"].includes(window.location.hostname);
-
-  if (isLocalhost) {
-    const credential = await signInWithPopup(authClient, provider);
-    if (credential.user) {
-      setSessionCookie();
-    }
-    return;
+  const credential = await signInWithPopup(authClient, provider);
+  if (credential.user) {
+    setSessionCookie();
   }
-
-  await signInWithRedirect(authClient, provider);
 }
 
 export async function signInAnonymously(): Promise<FirebaseUser> {
