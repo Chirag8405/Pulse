@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => {
   return {
     getDoc: vi.fn(),
     setDoc: vi.fn(),
-    runTransaction: vi.fn(),
+    writeBatch: vi.fn(),
     serverTimestamp: vi.fn(() => "SERVER_TIMESTAMP"),
     arrayUnion: vi.fn((value: string) => ({ __arrayUnion: value })),
     userDoc: vi.fn((uid: string) => `user:${uid}`),
@@ -26,9 +26,9 @@ vi.mock("firebase/firestore", () => ({
   onSnapshot: vi.fn(),
   orderBy: vi.fn(),
   query: vi.fn(),
-  runTransaction: mocks.runTransaction,
   serverTimestamp: mocks.serverTimestamp,
   setDoc: mocks.setDoc,
+  writeBatch: mocks.writeBatch,
   where: vi.fn(),
 }));
 
@@ -113,25 +113,23 @@ describe("firebase helpers", () => {
     ).rejects.toThrow();
   });
 
-  it("joinTeam uses a Firestore transaction", async () => {
-    const transaction = {
-      get: vi
-        .fn()
-        .mockResolvedValueOnce({ exists: () => true, data: () => ({}) })
-        .mockResolvedValueOnce({ exists: () => true, data: () => ({ memberIds: [] }) }),
+  it("joinTeam uses a Firestore write batch", async () => {
+    const batch = {
       update: vi.fn(),
+      commit: vi.fn().mockResolvedValue(undefined),
     };
 
-    mocks.runTransaction.mockImplementation(async (_db, callback) => callback(transaction));
+    mocks.writeBatch.mockReturnValue(batch);
 
     await joinTeam("user-9", "team-9");
 
-    expect(mocks.runTransaction).toHaveBeenCalledTimes(1);
-    expect(transaction.update).toHaveBeenCalledWith("team:team-9", {
+    expect(mocks.writeBatch).toHaveBeenCalledWith({ id: "mock-db" });
+    expect(batch.update).toHaveBeenCalledWith("team:team-9", {
       memberIds: { __arrayUnion: "user-9" },
     });
-    expect(transaction.update).toHaveBeenCalledWith("user:user-9", {
+    expect(batch.update).toHaveBeenCalledWith("user:user-9", {
       teamId: "team-9",
     });
+    expect(batch.commit).toHaveBeenCalledTimes(1);
   });
 });

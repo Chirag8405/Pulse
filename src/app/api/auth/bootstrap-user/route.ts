@@ -157,23 +157,41 @@ export async function POST(request: NextRequest) {
     const decodedToken = await adminAuth.verifyIdToken(token);
     const uid = decodedToken.uid;
     const normalizedEmail = (decodedToken.email ?? "").trim().toLowerCase();
+    const allowlistedAdmin = normalizedEmail.length > 0 && ADMIN_EMAILS.has(normalizedEmail);
+    const claimAdmin = hasAdminClaim(decodedToken as AdminClaims);
 
     const userReference = adminDb.collection("users").doc(uid);
     const userSnapshot = await userReference.get();
 
-    const legacyData = userSnapshot.exists
-      ? null
-      : await getLegacyUserByEmail(decodedToken.email, uid);
+    if (userSnapshot.exists) {
+      const existingData = userSnapshot.data() as Partial<UserBootstrapDoc>;
+      const existingAdmin = hasExistingAdminFlag(existingData);
+      const shouldPromoteToAdmin = !existingAdmin && (allowlistedAdmin || claimAdmin);
 
-    const existingData = userSnapshot.exists
-      ? (userSnapshot.data() as Partial<UserBootstrapDoc>)
-      : legacyData;
+      const safeProfilePayload = {
+        email: decodedToken.email ?? null,
+        displayName: decodedToken.name ?? null,
+        photoURL: decodedToken.picture ?? null,
+        ...(shouldPromoteToAdmin ? { isAdmin: true } : {}),
+      };
 
-    const allowlistedAdmin = normalizedEmail.length > 0 && ADMIN_EMAILS.has(normalizedEmail);
+      if (process.env.NODE_ENV === "development") {
+        console.log(
+          "[bootstrap] writing user doc, isAdmin field being set to:",
+          (safeProfilePayload as { isAdmin?: unknown }).isAdmin
+        );
+      }
+
+      await userReference.set(safeProfilePayload, { merge: true });
+
+      return NextResponse.json({ isAdmin: existingAdmin || shouldPromoteToAdmin });
+    }
+
+    const legacyData = await getLegacyUserByEmail(decodedToken.email, uid);
+    const existingAdmin = hasExistingAdminFlag(legacyData);
 
     let firstUserAdmin = false;
-
-    if (!allowlistedAdmin && AUTO_BOOTSTRAP_FIRST_ADMIN) {
+    if (!existingAdmin && !allowlistedAdmin && !claimAdmin && AUTO_BOOTSTRAP_FIRST_ADMIN) {
       const adminSnapshot = await adminDb
         .collection("users")
         .where("isAdmin", "==", true)
@@ -182,25 +200,29 @@ export async function POST(request: NextRequest) {
       firstUserAdmin = adminSnapshot.empty;
     }
 
-    const claimAdmin = hasAdminClaim(decodedToken as AdminClaims);
+    const isAdmin = existingAdmin || allowlistedAdmin || firstUserAdmin || claimAdmin;
 
-    const isAdmin =
-      hasExistingAdminFlag(existingData) || allowlistedAdmin || firstUserAdmin || claimAdmin;
-
-    const payload: UserBootstrapDoc = {
+    const newUserPayload: UserBootstrapDoc = {
       uid,
-      email: decodedToken.email ?? existingData?.email ?? null,
-      displayName: decodedToken.name ?? existingData?.displayName ?? null,
-      photoURL: decodedToken.picture ?? existingData?.photoURL ?? null,
-      teamId: existingData?.teamId ?? null,
-      venueId: existingData?.venueId ?? VENUE_NAME,
-      joinedAt: existingData?.joinedAt ?? new Date(),
-      totalPoints: getNumber(existingData?.totalPoints),
-      totalChallengesCompleted: getNumber(existingData?.totalChallengesCompleted),
+      email: decodedToken.email ?? legacyData?.email ?? null,
+      displayName: decodedToken.name ?? legacyData?.displayName ?? null,
+      photoURL: decodedToken.picture ?? legacyData?.photoURL ?? null,
+      teamId: legacyData?.teamId ?? null,
+      venueId: legacyData?.venueId ?? VENUE_NAME,
+      joinedAt: legacyData?.joinedAt ?? new Date(),
+      totalPoints: getNumber(legacyData?.totalPoints),
+      totalChallengesCompleted: getNumber(legacyData?.totalChallengesCompleted),
       isAdmin,
     };
 
-    await userReference.set(payload, { merge: true });
+    if (process.env.NODE_ENV === "development") {
+      console.log(
+        "[bootstrap] writing user doc, isAdmin field being set to:",
+        newUserPayload.isAdmin
+      );
+    }
+
+    await userReference.set(newUserPayload, { merge: true });
 
     return NextResponse.json({ isAdmin });
   } catch (error) {

@@ -24,8 +24,14 @@ const firebaseConfig = {
   appId:
     process.env.NEXT_PUBLIC_FIREBASE_APP_ID ||
     "1:1234567890:web:1234567890abcdef123456",
-  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID || "G-DEMO123456",
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
+
+const shouldInitializeAnalytics =
+  typeof window !== "undefined" &&
+  Boolean(firebaseConfig.measurementId) &&
+  (process.env.NODE_ENV === "production" ||
+    process.env.NEXT_PUBLIC_ENABLE_FIREBASE_ANALYTICS === "true");
 
 export const app: FirebaseApp = getApps().length
   ? getApp()
@@ -54,7 +60,7 @@ function createFirestore(): Firestore {
 export const db: Firestore = createFirestore();
 
 export const analyticsPromise: Promise<Analytics | null> =
-  typeof window === "undefined"
+  !shouldInitializeAnalytics
     ? Promise.resolve(null)
     : isSupported()
         .then((supported) => (supported ? getAnalytics(app) : null))

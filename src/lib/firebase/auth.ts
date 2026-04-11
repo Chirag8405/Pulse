@@ -40,11 +40,28 @@ function clearSessionCookie(): void {
   document.cookie = `${SESSION_COOKIE_NAME}=; Path=/; Max-Age=0; SameSite=Lax`;
 }
 
-export async function signInWithGoogle(): Promise<void> {
+interface GoogleSignInOptions {
+  forceAccountSelection?: boolean;
+  clearExistingSession?: boolean;
+}
+
+export async function signInWithGoogle(
+  options: GoogleSignInOptions = {}
+): Promise<void> {
   const authClient = requireAuth();
+
+  if (options.clearExistingSession && authClient.currentUser) {
+    await firebaseSignOut(authClient);
+    clearSessionCookie();
+  }
+
   const provider = new GoogleAuthProvider();
   provider.addScope("profile");
   provider.addScope("email");
+
+  if (options.forceAccountSelection) {
+    provider.setCustomParameters({ prompt: "select_account" });
+  }
 
   const credential = await signInWithPopup(authClient, provider);
   if (credential.user) {

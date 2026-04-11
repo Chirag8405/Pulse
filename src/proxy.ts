@@ -13,6 +13,7 @@ const PROTECTED_PREFIXES = [
 const SECURITY_HEADERS: Readonly<Record<string, string>> = {
   "X-Frame-Options": "DENY",
   "X-Content-Type-Options": "nosniff",
+  "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
   "Referrer-Policy": "strict-origin-when-cross-origin",
   "Permissions-Policy": "camera=(), microphone=(), geolocation=(self)",
   "Content-Security-Policy":

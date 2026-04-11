@@ -159,9 +159,12 @@ export default function JoinPage() {
       return;
     }
 
-    void joinTeam(userId, teamId).catch(() => {
-      toast.error("Could not join team. Please try again.");
-    });
+    void user
+      .getIdToken(true)
+      .then(() => joinTeam(userId, teamId))
+      .catch(() => {
+        toast.error("Could not join team. Please try again.");
+      });
   }, [resetOnboarding, router, selectedTeam, user]);
 
   useEffect(() => {

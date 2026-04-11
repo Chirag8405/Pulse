@@ -9,9 +9,9 @@ import {
   onSnapshot,
   orderBy,
   query,
-  runTransaction,
   serverTimestamp,
   setDoc,
+  writeBatch,
   where,
 } from "firebase/firestore";
 import { VENUE_NAME } from "@/constants";
@@ -89,10 +89,20 @@ export async function getUserById(uid: string): Promise<User | null> {
 
   try {
     const snapshot = await getDocFromServer(userReference);
+
+    if (process.env.NODE_ENV === "development") {
+      console.log("[getUserById] uid:", uid, "isAdmin:", snapshot.data()?.isAdmin);
+    }
+
     return snapshot.exists() ? normalizeUserAdminFlag(snapshot.data()) : null;
   } catch {
     // Fall back to cached lookup if server is temporarily unavailable.
     const snapshot = await getDoc(userReference);
+
+    if (process.env.NODE_ENV === "development") {
+      console.log("[getUserById] uid:", uid, "isAdmin:", snapshot.data()?.isAdmin);
+    }
+
     return snapshot.exists() ? normalizeUserAdminFlag(snapshot.data()) : null;
   }
 }
@@ -158,7 +168,23 @@ export async function getOrCreateUser(firebaseUser: FirebaseUser): Promise<User>
       isAdmin: false,
     };
 
-    await setDoc(userDoc(firebaseUser.uid), newUser);
+    try {
+      await setDoc(userDoc(firebaseUser.uid), newUser, { merge: true });
+    } catch (writeError) {
+      // If the user doc already exists with stricter fields (for example isAdmin),
+      // prefer reading canonical server state over failing auth hydration.
+      const hydratedUser = await getUserById(firebaseUser.uid);
+      if (hydratedUser) {
+        return hydratedUser;
+      }
+
+      throw writeError;
+    }
+
+    const hydratedUser = await getUserById(firebaseUser.uid);
+    if (hydratedUser) {
+      return hydratedUser;
+    }
 
     return newUser;
   })();
@@ -273,31 +299,15 @@ export async function updateUserLocation(
 }
 
 export async function joinTeam(userId: string, teamId: string): Promise<void> {
-  await runTransaction(db, async (transaction) => {
-    const userReference = userDoc(userId);
-    const teamReference = teamDoc(teamId);
+  const batch = writeBatch(db);
 
-    const userSnapshot = await transaction.get(userReference);
-    const teamSnapshot = await transaction.get(teamReference);
-
-    if (!userSnapshot.exists()) {
-      throw new Error("User document not found");
-    }
-
-    if (!teamSnapshot.exists()) {
-      throw new Error("Team document not found");
-    }
-
-    const team = teamSnapshot.data();
-
-    if (!team.memberIds.includes(userId)) {
-      transaction.update(teamReference, {
-        memberIds: arrayUnion(userId),
-      });
-    }
-
-    transaction.update(userReference, {
-      teamId,
-    });
+  batch.update(teamDoc(teamId), {
+    memberIds: arrayUnion(userId),
   });
+
+  batch.update(userDoc(userId), {
+    teamId,
+  });
+
+  await batch.commit();
 }

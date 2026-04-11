@@ -119,7 +119,10 @@ function LoginContent() {
     setPendingMethod("google");
 
     try {
-      await signInWithGoogle();
+      await signInWithGoogle({
+        clearExistingSession: true,
+        forceAccountSelection: true,
+      });
     } catch (error) {
       toast.error(getErrorMessage(error));
     } finally {
