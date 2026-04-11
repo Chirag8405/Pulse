@@ -167,24 +167,38 @@ export async function POST(request: NextRequest) {
       const existingData = userSnapshot.data() as Partial<UserBootstrapDoc>;
       const existingAdmin = hasExistingAdminFlag(existingData);
       const shouldPromoteToAdmin = !existingAdmin && (allowlistedAdmin || claimAdmin);
+      const resolvedIsAdmin = existingAdmin || shouldPromoteToAdmin;
+      const resolvedTeamId =
+        typeof existingData.teamId === "string" ? existingData.teamId : null;
 
       const safeProfilePayload = {
         email: decodedToken.email ?? null,
         displayName: decodedToken.name ?? null,
         photoURL: decodedToken.picture ?? null,
-        ...(shouldPromoteToAdmin ? { isAdmin: true } : {}),
+        isAdmin: resolvedIsAdmin,
       };
 
       if (process.env.NODE_ENV === "development") {
         console.log(
-          "[bootstrap] writing user doc, isAdmin field being set to:",
-          (safeProfilePayload as { isAdmin?: unknown }).isAdmin
+          "[bootstrap] existing user admin resolution",
+          {
+            uid,
+            email: normalizedEmail || null,
+            existingAdmin,
+            allowlistedAdmin,
+            claimAdmin,
+            shouldPromoteToAdmin,
+            resolvedIsAdmin,
+          }
         );
       }
 
       await userReference.set(safeProfilePayload, { merge: true });
 
-      return NextResponse.json({ isAdmin: existingAdmin || shouldPromoteToAdmin });
+      return NextResponse.json({
+        isAdmin: resolvedIsAdmin,
+        teamId: resolvedTeamId,
+      });
     }
 
     const legacyData = await getLegacyUserByEmail(decodedToken.email, uid);
@@ -217,14 +231,25 @@ export async function POST(request: NextRequest) {
 
     if (process.env.NODE_ENV === "development") {
       console.log(
-        "[bootstrap] writing user doc, isAdmin field being set to:",
-        newUserPayload.isAdmin
+        "[bootstrap] new user admin resolution",
+        {
+          uid,
+          email: normalizedEmail || null,
+          existingAdmin,
+          allowlistedAdmin,
+          claimAdmin,
+          firstUserAdmin,
+          resolvedIsAdmin: newUserPayload.isAdmin,
+        }
       );
     }
 
     await userReference.set(newUserPayload, { merge: true });
 
-    return NextResponse.json({ isAdmin });
+    return NextResponse.json({
+      isAdmin,
+      teamId: newUserPayload.teamId,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Authentication failed";
 

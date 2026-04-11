@@ -54,6 +54,16 @@ function buildEmptyZoneCounts(): Record<string, number> {
 
 const EMPTY_ZONE_COUNTS = buildEmptyZoneCounts();
 
+function safeUnsubscribe(unsubscribe: () => void, source: string): void {
+  try {
+    unsubscribe();
+  } catch (error) {
+    if (process.env.NODE_ENV === "development") {
+      console.warn(`[useAdminRealtime] unsubscribe failed (${source})`, error);
+    }
+  }
+}
+
 export interface ZoneOccupancyData {
   byZone: Record<string, number>;
   totalActiveMembers: number;
@@ -100,7 +110,7 @@ export function useEventsFeed(feedLimit = 30): FeedResult<Event[]> {
     );
 
     return () => {
-      unsubscribe();
+      safeUnsubscribe(unsubscribe, "useEventsFeed");
     };
   }, [feedLimit, handleSnapshot, handleSnapshotError]);
 
@@ -151,7 +161,7 @@ export function useChallengesFeed(feedLimit = 100): FeedResult<Challenge[]> {
     );
 
     return () => {
-      unsubscribe();
+      safeUnsubscribe(unsubscribe, "useChallengesFeed");
     };
   }, [feedLimit, handleSnapshot, handleSnapshotError]);
 
@@ -218,7 +228,7 @@ export function useTeamsByEvent(
     );
 
     return () => {
-      unsubscribe();
+      safeUnsubscribe(unsubscribe, "useTeamsByEvent");
     };
   }, [eventId, handleSnapshot, handleSnapshotError]);
 
@@ -300,7 +310,7 @@ export function useZoneOccupancy(): FeedResult<ZoneOccupancyData> {
     );
 
     return () => {
-      unsubscribe();
+      safeUnsubscribe(unsubscribe, "useZoneOccupancy");
     };
   }, [handleSnapshot, handleSnapshotError]);
 

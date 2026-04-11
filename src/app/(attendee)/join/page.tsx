@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { User as FirebaseUser } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import { Bell, CheckCircle2, Map, Trophy } from "lucide-react";
 import { toast } from "sonner";
@@ -8,7 +9,6 @@ import { AuthGuard } from "@/components/layout/AuthGuard";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { SeatInputSchema } from "@/lib/schemas";
-import { joinTeam } from "@/lib/firebase/helpers";
 import { TEAM_MAPPINGS, getTeamForSeatSection } from "@/constants/teams";
 import { useAuth } from "@/hooks/useAuth";
 import { useOnboardingStore } from "@/stores/onboardingStore";
@@ -38,6 +38,37 @@ function isMockE2EAuthSession(): boolean {
   return Boolean((window as PulseE2EWindow).__PULSE_E2E_AUTH__);
 }
 
+function getJoinErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+
+  return "Could not join team. Please try again.";
+}
+
+async function joinTeamOnServer(
+  firebaseUser: FirebaseUser,
+  teamId: string
+): Promise<void> {
+  const token = await firebaseUser.getIdToken(true);
+  const response = await fetch("/api/teams/join", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ teamId }),
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as
+      | { error?: string }
+      | null;
+    throw new Error(payload?.error ?? "Could not join team. Please try again.");
+  }
+}
+
 export default function JoinPage() {
   const router = useRouter();
   const { firestoreUser, isAdmin, loading, user } = useAuth();
@@ -55,6 +86,7 @@ export default function JoinPage() {
   const [seatError, setSeatError] = useState<string | null>(null);
   const [isSeatValid, setIsSeatValid] = useState(false);
   const [hasSubmittedSeatStep, setHasSubmittedSeatStep] = useState(false);
+  const [isJoiningTeam, setIsJoiningTeam] = useState(false);
 
   const seatSection = useMemo(() => getSectionFromSeatInput(seatInput), [seatInput]);
 
@@ -138,7 +170,7 @@ export default function JoinPage() {
     router.push("/dashboard");
   }, [resetOnboarding, router]);
 
-  const handleEnterArena = useCallback(() => {
+  const handleEnterArena = useCallback(async () => {
     if (!user?.uid) {
       toast.error("User session not found. Please sign in again.");
       return;
@@ -152,19 +184,24 @@ export default function JoinPage() {
     const userId = user.uid;
     const teamId = selectedTeam.id;
 
-    router.push("/dashboard");
-    resetOnboarding();
+    setIsJoiningTeam(true);
 
-    if (isMockE2EAuthSession()) {
-      return;
+    try {
+      if (!isMockE2EAuthSession()) {
+        await joinTeamOnServer(user, teamId);
+      }
+
+      resetOnboarding();
+      router.push("/dashboard");
+    } catch (error) {
+      if (process.env.NODE_ENV === "development") {
+        console.error("[joinTeam] failed", error);
+      }
+
+      toast.error(getJoinErrorMessage(error));
+    } finally {
+      setIsJoiningTeam(false);
     }
-
-    void user
-      .getIdToken(true)
-      .then(() => joinTeam(userId, teamId))
-      .catch(() => {
-        toast.error("Could not join team. Please try again.");
-      });
   }, [resetOnboarding, router, selectedTeam, user]);
 
   useEffect(() => {
@@ -214,9 +251,9 @@ export default function JoinPage() {
         return;
       }
 
-      if (step === 3 && selectedTeam && user?.uid) {
+      if (step === 3 && selectedTeam && user?.uid && !isJoiningTeam) {
         event.preventDefault();
-        handleEnterArena();
+        void handleEnterArena();
       }
     };
 
@@ -231,6 +268,7 @@ export default function JoinPage() {
     handleJoinThisTeam,
     handleSeatContinue,
     isSeatValid,
+    isJoiningTeam,
     selectedTeam,
     step,
     user?.uid,
@@ -409,10 +447,13 @@ export default function JoinPage() {
 
                 <Button
                   type="button"
-                  onClick={handleEnterArena}
+                  onClick={() => {
+                    void handleEnterArena();
+                  }}
+                  disabled={isJoiningTeam}
                   className="nb-btn mt-6 h-11 w-full border-2 border-border bg-primary text-base font-bold text-primary-foreground"
                 >
-                  Enter the Arena
+                  {isJoiningTeam ? "Joining Team..." : "Enter the Arena"}
                 </Button>
               </div>
             ) : null}

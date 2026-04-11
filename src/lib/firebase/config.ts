@@ -4,6 +4,7 @@ import {
   type Firestore,
   getFirestore,
   initializeFirestore,
+  memoryLocalCache,
   persistentLocalCache,
   persistentSingleTabManager,
 } from "firebase/firestore";
@@ -33,6 +34,15 @@ const shouldInitializeAnalytics =
   (process.env.NODE_ENV === "production" ||
     process.env.NEXT_PUBLIC_ENABLE_FIREBASE_ANALYTICS === "true");
 
+const shouldUsePersistentFirestoreCache =
+  typeof window !== "undefined" &&
+  process.env.NEXT_PUBLIC_ENABLE_FIRESTORE_PERSISTENCE === "true";
+
+const shouldForceLongPollingTransport =
+  typeof window !== "undefined" &&
+  (process.env.NEXT_PUBLIC_FIREBASE_FORCE_LONG_POLLING === "true" ||
+    process.env.NODE_ENV === "development");
+
 export const app: FirebaseApp = getApps().length
   ? getApp()
   : initializeApp(firebaseConfig);
@@ -47,9 +57,17 @@ function createFirestore(): Firestore {
 
   try {
     return initializeFirestore(app, {
-      localCache: persistentLocalCache({
-        tabManager: persistentSingleTabManager(undefined),
-      }),
+      localCache: shouldUsePersistentFirestoreCache
+        ? persistentLocalCache({
+            tabManager: persistentSingleTabManager(),
+          })
+        : memoryLocalCache(),
+      ...(shouldForceLongPollingTransport
+        ? {
+            experimentalForceLongPolling: true,
+            useFetchStreams: false,
+          }
+        : {}),
     });
   } catch {
     // Hot reload can re-enter this module after Firestore has been initialized.

@@ -96,14 +96,18 @@ export async function getUserById(uid: string): Promise<User | null> {
 
     return snapshot.exists() ? normalizeUserAdminFlag(snapshot.data()) : null;
   } catch {
-    // Fall back to cached lookup if server is temporarily unavailable.
-    const snapshot = await getDoc(userReference);
+    try {
+      // Fall back to cached lookup if server is temporarily unavailable.
+      const snapshot = await getDoc(userReference);
 
-    if (process.env.NODE_ENV === "development") {
-      console.log("[getUserById] uid:", uid, "isAdmin:", snapshot.data()?.isAdmin);
+      if (process.env.NODE_ENV === "development") {
+        console.log("[getUserById] uid:", uid, "isAdmin:", snapshot.data()?.isAdmin);
+      }
+
+      return snapshot.exists() ? normalizeUserAdminFlag(snapshot.data()) : null;
+    } catch {
+      return null;
     }
-
-    return snapshot.exists() ? normalizeUserAdminFlag(snapshot.data()) : null;
   }
 }
 
@@ -112,7 +116,14 @@ export async function getTeamById(teamId: string): Promise<Team | null> {
   return snapshot.exists() ? snapshot.data() : null;
 }
 
-async function bootstrapUserOnServer(firebaseUser: FirebaseUser): Promise<void> {
+interface BootstrapUserResponse {
+  isAdmin?: boolean;
+  teamId?: string | null;
+}
+
+async function bootstrapUserOnServer(
+  firebaseUser: FirebaseUser
+): Promise<BootstrapUserResponse | null> {
   const token = await firebaseUser.getIdToken(true);
   const response = await fetch("/api/auth/bootstrap-user", {
     method: "POST",
@@ -128,6 +139,8 @@ async function bootstrapUserOnServer(firebaseUser: FirebaseUser): Promise<void> 
       | null;
     throw new Error(payload?.error ?? "Failed to bootstrap user");
   }
+
+  return (await response.json().catch(() => null)) as BootstrapUserResponse | null;
 }
 
 export async function getOrCreateUser(firebaseUser: FirebaseUser): Promise<User> {
@@ -138,21 +151,67 @@ export async function getOrCreateUser(firebaseUser: FirebaseUser): Promise<User>
   }
 
   const syncPromise = (async () => {
+    let hasBootstrapResult = false;
+    let bootstrappedIsAdmin: boolean | null = null;
+    let bootstrappedTeamId: string | null = null;
+
+    const applyBootstrapAdminFallback = (user: User): User => {
+      if (bootstrappedIsAdmin !== true && bootstrappedTeamId == null) {
+        return user;
+      }
+
+      return {
+        ...user,
+        isAdmin: bootstrappedIsAdmin === true ? true : user.isAdmin,
+        teamId:
+          user.teamId ??
+          (typeof bootstrappedTeamId === "string" ? bootstrappedTeamId : null),
+      };
+    };
+
     try {
-      await bootstrapUserOnServer(firebaseUser);
+      const bootstrapResult = await bootstrapUserOnServer(firebaseUser);
+      hasBootstrapResult = bootstrapResult !== null;
+      bootstrappedIsAdmin = bootstrapResult?.isAdmin === true;
+      bootstrappedTeamId =
+        typeof bootstrapResult?.teamId === "string" ? bootstrapResult.teamId : null;
+
       const syncedUser = await getUserById(firebaseUser.uid);
 
       if (syncedUser) {
-        return syncedUser;
+        return applyBootstrapAdminFallback(syncedUser);
       }
     } catch {
       // Fallback for local/offline development where API route may be unavailable.
     }
 
-    const existing = await getUserById(firebaseUser.uid);
+    let existing: User | null = null;
+
+    try {
+      existing = await getUserById(firebaseUser.uid);
+    } catch {
+      existing = null;
+    }
 
     if (existing) {
-      return existing;
+      return applyBootstrapAdminFallback(existing);
+    }
+
+    if (hasBootstrapResult) {
+      // Bootstrap succeeded on the server. If Firestore reads are unavailable on the client,
+      // avoid local writes that can fail due rules and hydrate from server-derived basics.
+      return {
+        uid: firebaseUser.uid,
+        email: firebaseUser.email,
+        displayName: firebaseUser.displayName,
+        photoURL: firebaseUser.photoURL,
+        teamId: bootstrappedTeamId,
+        venueId: VENUE_NAME,
+        joinedAt: Timestamp.now(),
+        totalPoints: 0,
+        totalChallengesCompleted: 0,
+        isAdmin: bootstrappedIsAdmin === true,
+      };
     }
 
     const newUser: User = {
@@ -160,12 +219,12 @@ export async function getOrCreateUser(firebaseUser: FirebaseUser): Promise<User>
       email: firebaseUser.email,
       displayName: firebaseUser.displayName,
       photoURL: firebaseUser.photoURL,
-      teamId: null,
+      teamId: bootstrappedTeamId,
       venueId: VENUE_NAME,
       joinedAt: Timestamp.now(),
       totalPoints: 0,
       totalChallengesCompleted: 0,
-      isAdmin: false,
+      isAdmin: bootstrappedIsAdmin === true,
     };
 
     try {
@@ -175,18 +234,25 @@ export async function getOrCreateUser(firebaseUser: FirebaseUser): Promise<User>
       // prefer reading canonical server state over failing auth hydration.
       const hydratedUser = await getUserById(firebaseUser.uid);
       if (hydratedUser) {
-        return hydratedUser;
+        return applyBootstrapAdminFallback(hydratedUser);
       }
 
-      throw writeError;
+      if (process.env.NODE_ENV === "development") {
+        console.warn("[getOrCreateUser] fallback user hydration after setDoc failure", {
+          uid: firebaseUser.uid,
+          message: writeError instanceof Error ? writeError.message : String(writeError),
+        });
+      }
+
+      return newUser;
     }
 
     const hydratedUser = await getUserById(firebaseUser.uid);
     if (hydratedUser) {
-      return hydratedUser;
+      return applyBootstrapAdminFallback(hydratedUser);
     }
 
-    return newUser;
+    return applyBootstrapAdminFallback(newUser);
   })();
 
   userSyncInFlight.set(firebaseUser.uid, syncPromise);

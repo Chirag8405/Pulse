@@ -80,7 +80,8 @@ function LoginContent() {
   const searchParams = useSearchParams();
   const { firestoreUser, isAuthenticated, isAdmin, loading } = useAuth();
   const [pendingMethod, setPendingMethod] = useState<PendingMethod>(null);
-  const hasHandledPostLoginRedirect = useRef(false);
+  const lastRedirectDestinationRef = useRef<string | null>(null);
+  const hasShownNonAdminToastRef = useRef(false);
 
   const requestedRedirect = useMemo(() => {
     return searchParams.get("redirect") || "";
@@ -99,21 +100,35 @@ function LoginContent() {
   }, [firestoreUser?.teamId, isAdmin]);
 
   useEffect(() => {
-    if (loading || !isAuthenticated || hasHandledPostLoginRedirect.current) {
+    if (loading || !isAuthenticated) {
       return;
     }
 
-    hasHandledPostLoginRedirect.current = true;
-
-    if (isAdminTarget && !isAdmin) {
+    if (isAdminTarget && !isAdmin && !hasShownNonAdminToastRef.current) {
+      hasShownNonAdminToastRef.current = true;
       toast("Signed in as attendee", {
         description:
           "Your account does not have venue staff access. Redirecting to attendee flow.",
       });
     }
 
+    if (lastRedirectDestinationRef.current === postLoginDestination) {
+      return;
+    }
+
+    lastRedirectDestinationRef.current = postLoginDestination;
+
     router.replace(postLoginDestination);
   }, [isAdmin, isAdminTarget, isAuthenticated, loading, postLoginDestination, router]);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      return;
+    }
+
+    lastRedirectDestinationRef.current = null;
+    hasShownNonAdminToastRef.current = false;
+  }, [isAuthenticated]);
 
   const handleGoogleSignIn = useCallback(async () => {
     setPendingMethod("google");
