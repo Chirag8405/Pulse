@@ -46,7 +46,7 @@ function getErrorMessage(error: unknown): string {
 
 function LoginFallback() {
   return (
-    <main
+    <div
       className="flex min-h-screen items-center justify-center bg-background px-4 py-10"
       style={{
         backgroundImage:
@@ -60,7 +60,7 @@ function LoginFallback() {
         </h1>
         <p className="mt-3 text-sm text-muted-foreground">Loading login...</p>
       </section>
-    </main>
+    </div>
   );
 }
 

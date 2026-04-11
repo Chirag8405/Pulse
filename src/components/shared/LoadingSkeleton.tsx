@@ -68,7 +68,7 @@ export function LoadingSkeleton({
   }
 
   return (
-    <main className="min-h-screen bg-background p-6" aria-busy="true">
+    <div className="min-h-screen bg-background p-6" aria-busy="true">
       <div className="sr-only" role="status" aria-live="polite">
         Loading dashboard
       </div>
@@ -83,6 +83,6 @@ export function LoadingSkeleton({
           <Skeleton className={`h-64 ${skeletonTone}`} />
         </div>
       </section>
-    </main>
+    </div>
   );
 }

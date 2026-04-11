@@ -38,10 +38,11 @@ function isActive(pathname: string, href: string): boolean {
 
 interface SidebarNavProps {
   pathname: string;
+  navigationLabel: string;
   onNavigate?: () => void;
 }
 
-function SidebarNav({ pathname, onNavigate }: SidebarNavProps) {
+function SidebarNav({ pathname, navigationLabel, onNavigate }: SidebarNavProps) {
   return (
     <div className="flex h-full flex-col bg-background">
       <div className="border-b-2 border-border px-4 py-4">
@@ -50,7 +51,7 @@ function SidebarNav({ pathname, onNavigate }: SidebarNavProps) {
         </p>
       </div>
 
-      <nav className="p-3" role="navigation" aria-label="Main navigation">
+      <nav className="p-3" role="navigation" aria-label={navigationLabel}>
         <ul className="space-y-1.5">
           {ADMIN_ITEMS.map((item) => {
             const Icon = item.icon;
@@ -106,7 +107,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   return (
     <div className="min-h-screen bg-background">
       <aside className="fixed inset-y-0 left-0 hidden w-60 border-r-2 border-border md:block">
-        <SidebarNav pathname={pathname} />
+        <SidebarNav pathname={pathname} navigationLabel="Admin sidebar navigation" />
       </aside>
 
       <div className="md:pl-60">
@@ -130,8 +131,15 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             </div>
 
             <div className="flex items-center gap-2">
-              <span className="inline-flex items-center border-2 border-border bg-amber-400 px-2 py-1 font-mono text-xs font-bold uppercase tracking-wide text-black">
-                ADMIN
+              <span
+                className={cn(
+                  "inline-flex items-center border-2 border-border px-2 py-1 font-mono text-xs font-bold uppercase tracking-wide",
+                  isAdmin
+                    ? "bg-amber-400 text-black"
+                    : "bg-muted text-foreground"
+                )}
+              >
+                {isAdmin ? "ADMIN" : "ATTENDEE"}
               </span>
               <span className="hidden border-2 border-border bg-card px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-wide text-muted-foreground lg:inline-flex">
                 {isAdmin ? "admin" : "attendee"}: {userLabel}
@@ -156,7 +164,11 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           side="left"
           className="w-60 max-w-none border-r-2 border-border p-0"
         >
-          <SidebarNav pathname={pathname} onNavigate={() => setMobileOpen(false)} />
+          <SidebarNav
+            pathname={pathname}
+            navigationLabel="Admin mobile navigation"
+            onNavigate={() => setMobileOpen(false)}
+          />
         </SheetContent>
       </Sheet>
     </div>

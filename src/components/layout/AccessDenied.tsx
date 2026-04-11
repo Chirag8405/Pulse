@@ -3,7 +3,7 @@ import { ShieldOff } from "lucide-react";
 
 export function AccessDenied() {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-background px-4 py-10">
+    <div className="flex min-h-screen items-center justify-center bg-background px-4 py-10">
       <section className="nb-card w-full max-w-md bg-card p-8 text-center">
         <ShieldOff className="mx-auto mb-4 size-14 text-muted-foreground" />
         <h1 className="text-3xl font-black tracking-tight">Access Denied</h1>
@@ -25,6 +25,6 @@ export function AccessDenied() {
           </Link>
         </div>
       </section>
-    </main>
+    </div>
   );
 }
