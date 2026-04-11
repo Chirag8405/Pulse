@@ -3,7 +3,6 @@
 import { useMemo } from "react";
 import dynamic from "next/dynamic";
 import { useQuery } from "@tanstack/react-query";
-import { getDocs } from "firebase/firestore";
 import { BarChart3 } from "lucide-react";
 import { AuthGuard } from "@/components/layout/AuthGuard";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -12,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { ZONES } from "@/constants";
 import { TEAM_MAPPINGS } from "@/constants/teams";
 import { useChallengesFeed, useZoneOccupancy } from "@/hooks/useAdminRealtime";
-import { teamProgressCollection } from "@/lib/firebase/collections";
+import { fetchChallengeTeamProgress } from "@/lib/firebase/realtimeApi";
 import type { Challenge } from "@/types/firebase";
 
 const ResponsiveContainer = dynamic(
@@ -77,6 +76,13 @@ const CHART_TOOLTIP_STYLE = {
   color: "rgb(var(--foreground))",
 } as const;
 
+const RESPONSIVE_CONTAINER_PROPS = {
+  width: "100%",
+  height: "100%",
+  minWidth: 0,
+  minHeight: 220,
+} as const;
+
 function getTeamLabel(teamId: string): string {
   return TEAM_MAPPINGS.find((team) => team.id === teamId)?.name ?? teamId;
 }
@@ -125,14 +131,13 @@ function AdminAnalyticsContent() {
           continue;
         }
 
-        const snapshot = await getDocs(teamProgressCollection(challenge.id));
+        const challengeProgressRows = await fetchChallengeTeamProgress(challenge.id);
 
         const row: Record<string, number | string> = {
           challenge: `C${index + 1}`,
         };
 
-        snapshot.docs.forEach((docSnapshot) => {
-          const progress = docSnapshot.data();
+        challengeProgressRows.forEach((progress) => {
           row[progress.teamId] = Math.round(progress.spreadScore);
         });
 
@@ -194,7 +199,7 @@ function AdminAnalyticsContent() {
         </p>
       </header>
 
-      <section className="nb-card bg-card p-4">
+      <section className="nb-card min-w-0 bg-card p-4">
         <h2 className="text-lg font-black tracking-tight">Spread Score Over Time</h2>
         <p className="text-xs text-muted-foreground">
           Last 10 challenges with one line per team.
@@ -208,8 +213,8 @@ function AdminAnalyticsContent() {
             headingLevel={3}
           />
         ) : (
-          <div className="mt-3 h-72" tabIndex={0} aria-label="Spread score over time chart">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="mt-3 h-72 min-w-0" tabIndex={0} aria-label="Spread score over time chart">
+            <ResponsiveContainer {...RESPONSIVE_CONTAINER_PROPS}>
               <LineChart data={spreadSeries} margin={{ top: 12, right: 16, left: 0, bottom: 8 }}>
                 <CartesianGrid stroke="rgb(var(--border))" strokeDasharray="2 2" />
                 <XAxis dataKey="challenge" stroke="rgb(var(--foreground))" tick={{ fontSize: 12 }} />
@@ -233,7 +238,7 @@ function AdminAnalyticsContent() {
         )}
       </section>
 
-      <section className="nb-card bg-card p-4">
+      <section className="nb-card min-w-0 bg-card p-4">
         <h2 className="text-lg font-black tracking-tight">Zone Occupancy Distribution</h2>
         <p className="text-xs text-muted-foreground">
           Live occupancy count by zone.
@@ -247,8 +252,8 @@ function AdminAnalyticsContent() {
             headingLevel={3}
           />
         ) : (
-          <div className="mt-3 h-80" tabIndex={0} aria-label="Zone occupancy distribution chart">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="mt-3 h-80 min-w-0" tabIndex={0} aria-label="Zone occupancy distribution chart">
+            <ResponsiveContainer {...RESPONSIVE_CONTAINER_PROPS}>
               <BarChart data={occupancyBarData} margin={{ top: 10, right: 16, left: 0, bottom: 8 }}>
                 <CartesianGrid stroke="rgb(var(--border))" strokeDasharray="2 2" />
                 <XAxis dataKey="zone" stroke="rgb(var(--foreground))" tick={{ fontSize: 11 }} />
@@ -269,7 +274,7 @@ function AdminAnalyticsContent() {
         )}
       </section>
 
-      <section className="nb-card bg-card p-4">
+      <section className="nb-card min-w-0 bg-card p-4">
         <h2 className="text-lg font-black tracking-tight">Challenge Completion Rate</h2>
         <p className="text-xs text-muted-foreground">
           Completed vs active vs pending challenge counts.
@@ -283,8 +288,8 @@ function AdminAnalyticsContent() {
             headingLevel={3}
           />
         ) : (
-          <div className="mt-3 h-80" tabIndex={0} aria-label="Challenge completion rate chart">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="mt-3 h-80 min-w-0" tabIndex={0} aria-label="Challenge completion rate chart">
+            <ResponsiveContainer {...RESPONSIVE_CONTAINER_PROPS}>
               <PieChart>
                 <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
                 <Legend />

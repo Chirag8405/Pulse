@@ -17,45 +17,30 @@ interface GoogleMapLike {
   unbindAll: () => void;
 }
 
-interface GoogleMarkerLike {
+interface GoogleCircleLike {
   setMap: (map: GoogleMapLike | null) => void;
-  setIcon: (icon: { url: string }) => void;
+  setOptions: (options: Record<string, unknown>) => void;
   addListener: (eventName: string, handler: () => void) => void;
 }
 
 interface GoogleInfoWindowLike {
   setContent: (content: string) => void;
-  open: (options: { map: GoogleMapLike; anchor: GoogleMarkerLike }) => void;
+  setPosition: (position: { lat: number; lng: number }) => void;
+  open: (options: { map: GoogleMapLike; shouldFocus?: boolean }) => void;
   close: () => void;
-}
-
-interface GoogleHeatmapLike {
-  setMap: (map: GoogleMapLike | null) => void;
-  setData: (data: Array<{ location: unknown; weight: number }>) => void;
 }
 
 interface GoogleMapsApi {
   maps: {
     Map: new (element: HTMLElement, options: Record<string, unknown>) => GoogleMapLike;
-    Marker: new (options: Record<string, unknown>) => GoogleMarkerLike;
+    Circle: new (options: Record<string, unknown>) => GoogleCircleLike;
     InfoWindow: new () => GoogleInfoWindowLike;
-    LatLng: new (lat: number, lng: number) => unknown;
-    visualization: {
-      HeatmapLayer: new (options: Record<string, unknown>) => GoogleHeatmapLike;
-    };
   };
 }
 
-interface MarkerEntry {
+interface ZoneCircleEntry {
   zoneId: string;
-  marker: GoogleMarkerLike;
-}
-
-interface HeatmapDataPoint {
-  zoneId: string;
-  lat: number;
-  lng: number;
-  weight: number;
+  circle: GoogleCircleLike;
 }
 
 const MAP_CENTER = { lat: 18.9388, lng: 72.8252 };
@@ -110,42 +95,6 @@ function getGoogleApi(): GoogleMapsApi | null {
   return candidate as GoogleMapsApi;
 }
 
-function getZoneInitial(zoneId: string): string {
-  if (zoneId === "zone-north") {
-    return "N";
-  }
-
-  if (zoneId === "zone-south") {
-    return "S";
-  }
-
-  if (zoneId === "zone-east") {
-    return "E";
-  }
-
-  if (zoneId === "zone-west") {
-    return "W";
-  }
-
-  if (zoneId === "zone-concourse-n") {
-    return "CN";
-  }
-
-  if (zoneId === "zone-concourse-s") {
-    return "CS";
-  }
-
-  if (zoneId === "zone-entry-main") {
-    return "ME";
-  }
-
-  if (zoneId === "zone-entry-sec") {
-    return "SE";
-  }
-
-  return "?";
-}
-
 function getActiveAttendeeCount(occupancyData: Record<string, number>): number {
   return Object.values(occupancyData).reduce((sum, count) => sum + count, 0);
 }
@@ -158,33 +107,6 @@ function getTopZones(occupancyData: Record<string, number>, limit = 3): string[]
     .sort((left, right) => right.count - left.count)
     .slice(0, limit)
     .map((entry) => entry.id);
-}
-
-function createMarkerIcon(
-  zoneInitial: string,
-  isActiveTarget: boolean
-) {
-  const fillColor = isActiveTarget ? "#2563EB" : "#F59E0B";
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
-      <circle cx="16" cy="16" r="14" fill="${fillColor}" stroke="#000000" stroke-width="2" />
-      <text x="16" y="19" text-anchor="middle" font-family="monospace" font-size="10" font-weight="700" fill="#000000">${zoneInitial}</text>
-    </svg>
-  `;
-
-  return {
-    url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
-  };
-}
-
-function toGoogleHeatmapPoints(
-  googleApi: GoogleMapsApi,
-  heatmapData: HeatmapDataPoint[]
-) {
-  return heatmapData.map((point) => ({
-    location: new googleApi.maps.LatLng(point.lat, point.lng),
-    weight: point.weight,
-  }));
 }
 
 function buildInfoWindowContent(
@@ -219,14 +141,57 @@ function applyThemeStyle(map: GoogleMapLike): void {
   });
 }
 
+function getZoneOccupancyPercent(
+  zoneId: string,
+  occupancyData: Record<string, number>
+): number {
+  const zone = ZONES.find((entry) => entry.id === zoneId);
+
+  if (!zone || zone.capacity <= 0) {
+    return 0;
+  }
+
+  const count = occupancyData[zoneId] ?? 0;
+  return Math.max(0, Math.min(100, (count / zone.capacity) * 100));
+}
+
+function getCircleColor(occupancyPercent: number): string {
+  if (occupancyPercent >= 75) {
+    return "#ef4444";
+  }
+
+  if (occupancyPercent >= 40) {
+    return "#3b82f6";
+  }
+
+  return "#22d3ee";
+}
+
+function getZoneCircleOptions(
+  zoneId: string,
+  occupancyData: Record<string, number>,
+  isActiveTarget: boolean
+): Record<string, unknown> {
+  const occupancyPercent = getZoneOccupancyPercent(zoneId, occupancyData);
+  const baseColor = getCircleColor(occupancyPercent);
+
+  return {
+    radius: 22 + occupancyPercent * 0.95,
+    fillColor: baseColor,
+    fillOpacity: isActiveTarget ? 0.6 : 0.44,
+    strokeColor: isActiveTarget ? "#facc15" : "#111827",
+    strokeOpacity: 0.95,
+    strokeWeight: isActiveTarget ? 3 : 2,
+  };
+}
+
 export default function VenueHeatmap({ occupancyData }: VenueHeatmapProps) {
   const mapRootRef = useRef<HTMLDivElement>(null);
   const mapCanvasRef = useRef<HTMLDivElement>(null);
 
   const mapRef = useRef<GoogleMapLike | null>(null);
-  const heatmapLayerRef = useRef<GoogleHeatmapLike | null>(null);
   const infoWindowRef = useRef<GoogleInfoWindowLike | null>(null);
-  const markersRef = useRef<MarkerEntry[]>([]);
+  const circlesRef = useRef<ZoneCircleEntry[]>([]);
   const mutationObserverRef = useRef<MutationObserver | null>(null);
 
   const latestOccupancyRef = useRef(occupancyData);
@@ -243,15 +208,6 @@ export default function VenueHeatmap({ occupancyData }: VenueHeatmapProps) {
     () => getTopZones(occupancyData, 3),
     [occupancyData]
   );
-
-  const heatmapData = useMemo(() => {
-    return ZONES.map((zone) => ({
-      zoneId: zone.id,
-      lat: zone.lat,
-      lng: zone.lng,
-      weight: occupancyData[zone.id] ?? 0,
-    }));
-  }, [occupancyData]);
 
   const screenReaderZoneData = useMemo(() => {
     return ZONES.map((zone) => {
@@ -292,12 +248,12 @@ export default function VenueHeatmap({ occupancyData }: VenueHeatmapProps) {
           setOptions({
             key: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY!,
             v: "weekly",
-            libraries: ["visualization", "maps"],
+            libraries: ["maps"],
           });
           mapsOptionsConfigured = true;
         }
 
-        await Promise.all([importLibrary("maps"), importLibrary("visualization")]);
+        await importLibrary("maps");
 
         const googleApi = getGoogleApi();
 
@@ -318,58 +274,33 @@ export default function VenueHeatmap({ occupancyData }: VenueHeatmapProps) {
         mapRef.current = map;
         applyThemeStyle(map);
 
-        const heatmapLayer = new googleApi.maps.visualization.HeatmapLayer({
-          data: toGoogleHeatmapPoints(
-            googleApi,
-            ZONES.map((zone) => ({
-              zoneId: zone.id,
-              lat: zone.lat,
-              lng: zone.lng,
-              weight: latestOccupancyRef.current[zone.id] ?? 0,
-            }))
-          ),
-          radius: 30,
-          opacity: 0.7,
-          gradient: [
-            "rgba(0,0,0,0)",
-            "rgba(34,211,238,0.55)",
-            "rgba(59,130,246,0.8)",
-            "rgba(239,68,68,0.95)",
-          ],
-        });
-
-        heatmapLayer.setMap(map);
-        heatmapLayerRef.current = heatmapLayer;
-
         const infoWindow = new googleApi.maps.InfoWindow();
         infoWindowRef.current = infoWindow;
 
         const initialTargetZones = getTopZones(latestOccupancyRef.current, 3);
 
-        markersRef.current = ZONES.map((zone) => {
-          const marker = new googleApi.maps.Marker({
+        circlesRef.current = ZONES.map((zone) => {
+          const isActiveTarget = initialTargetZones.includes(zone.id);
+          const circle = new googleApi.maps.Circle({
             map,
-            position: { lat: zone.lat, lng: zone.lng },
-            title: zone.name,
-            icon: createMarkerIcon(
-              getZoneInitial(zone.id),
-              initialTargetZones.includes(zone.id)
-            ),
+            center: { lat: zone.lat, lng: zone.lng },
+            ...getZoneCircleOptions(zone.id, latestOccupancyRef.current, isActiveTarget),
           });
 
-          marker.addListener("click", () => {
+          circle.addListener("click", () => {
             infoWindow.setContent(
               buildInfoWindowContent(zone.id, latestOccupancyRef.current)
             );
+            infoWindow.setPosition({ lat: zone.lat, lng: zone.lng });
             infoWindow.open({
               map,
-              anchor: marker,
+              shouldFocus: false,
             });
           });
 
           return {
             zoneId: zone.id,
-            marker,
+            circle,
           };
         });
 
@@ -401,13 +332,10 @@ export default function VenueHeatmap({ occupancyData }: VenueHeatmapProps) {
     return () => {
       disposed = true;
 
-      heatmapLayerRef.current?.setMap(null);
-      heatmapLayerRef.current = null;
-
-      markersRef.current.forEach((entry) => {
-        entry.marker.setMap(null);
+      circlesRef.current.forEach((entry) => {
+        entry.circle.setMap(null);
       });
-      markersRef.current = [];
+      circlesRef.current = [];
 
       infoWindowRef.current?.close();
       infoWindowRef.current = null;
@@ -421,23 +349,20 @@ export default function VenueHeatmap({ occupancyData }: VenueHeatmapProps) {
   }, []);
 
   useEffect(() => {
-    const googleApi = getGoogleApi();
-
-    if (!heatmapLayerRef.current || !googleApi) {
+    if (circlesRef.current.length === 0) {
       return;
     }
 
-    heatmapLayerRef.current.setData(toGoogleHeatmapPoints(googleApi, heatmapData));
-
-    markersRef.current.forEach((entry) => {
-      entry.marker.setIcon(
-        createMarkerIcon(
-          getZoneInitial(entry.zoneId),
+    circlesRef.current.forEach((entry) => {
+      entry.circle.setOptions(
+        getZoneCircleOptions(
+          entry.zoneId,
+          occupancyData,
           activeTargetZoneIds.includes(entry.zoneId)
         )
       );
     });
-  }, [activeTargetZoneIds, heatmapData]);
+  }, [activeTargetZoneIds, occupancyData]);
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {

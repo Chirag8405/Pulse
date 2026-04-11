@@ -59,7 +59,7 @@ function createFirestore(): Firestore {
     return initializeFirestore(app, {
       localCache: shouldUsePersistentFirestoreCache
         ? persistentLocalCache({
-            tabManager: persistentSingleTabManager(),
+            tabManager: persistentSingleTabManager(undefined),
           })
         : memoryLocalCache(),
       ...(shouldForceLongPollingTransport

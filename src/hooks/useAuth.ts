@@ -61,6 +61,16 @@ export function useAuth(): UseAuthResult {
         return;
       }
 
+      // Avoid re-running expensive user hydration when auth state is already settled.
+      if (
+        user?.uid === firebaseUser.uid &&
+        isAuthReady &&
+        (firestoreUser !== null || isAdmin)
+      ) {
+        setUser(firebaseUser);
+        return;
+      }
+
       setUser(firebaseUser);
       setLoading(true);
       setIsAuthReady(false);
@@ -76,7 +86,16 @@ export function useAuth(): UseAuthResult {
         setLoading(false);
       }
     },
-    [setFirestoreUser, setIsAuthReady, setLoading, setUser]
+    [
+      firestoreUser,
+      isAdmin,
+      isAuthReady,
+      setFirestoreUser,
+      setIsAuthReady,
+      setLoading,
+      setUser,
+      user?.uid,
+    ]
   );
 
   useEffect(() => {
@@ -97,9 +116,6 @@ export function useAuth(): UseAuthResult {
       return;
     }
 
-    setLoading(true);
-    setIsAuthReady(false);
-
     const unsubscribe = onAuthChange((firebaseUser) => {
       void handleAuthChange(firebaseUser);
     });
@@ -107,7 +123,7 @@ export function useAuth(): UseAuthResult {
     return () => {
       unsubscribe();
     };
-  }, [e2eAuth, handleAuthChange, hasResolvedE2EAuth, setIsAuthReady, setLoading]);
+  }, [e2eAuth, handleAuthChange, hasResolvedE2EAuth]);
 
   if (!hasResolvedE2EAuth) {
     return {

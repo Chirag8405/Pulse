@@ -16,6 +16,12 @@ import {
   teamsCollection,
 } from "@/lib/firebase/collections";
 import { db } from "@/lib/firebase/config";
+import {
+  fetchChallengesFeed as fetchChallengesFeedFromApi,
+  fetchEventsFeed as fetchEventsFeedFromApi,
+  fetchTeamsByEvent as fetchTeamsByEventFromApi,
+  fetchZoneOccupancy as fetchZoneOccupancyFromApi,
+} from "@/lib/firebase/realtimeApi";
 import type { Challenge, Event, Team } from "@/types/firebase";
 
 interface FeedResult<T> {
@@ -54,6 +60,21 @@ function buildEmptyZoneCounts(): Record<string, number> {
 
 const EMPTY_ZONE_COUNTS = buildEmptyZoneCounts();
 
+const shouldUseRealtimeListeners =
+  typeof window !== "undefined" &&
+  (process.env.NEXT_PUBLIC_ENABLE_FIRESTORE_REALTIME_LISTENERS === "true" ||
+    process.env.NODE_ENV === "production");
+
+const configuredPollIntervalMs = Number.parseInt(
+  process.env.NEXT_PUBLIC_FIRESTORE_POLL_INTERVAL_MS ?? "5000",
+  10
+);
+
+const firestorePollIntervalMs =
+  Number.isFinite(configuredPollIntervalMs) && configuredPollIntervalMs >= 1_000
+    ? configuredPollIntervalMs
+    : 5_000;
+
 function safeUnsubscribe(unsubscribe: () => void, source: string): void {
   try {
     unsubscribe();
@@ -62,6 +83,43 @@ function safeUnsubscribe(unsubscribe: () => void, source: string): void {
       console.warn(`[useAdminRealtime] unsubscribe failed (${source})`, error);
     }
   }
+}
+
+function startPolling(
+  source: string,
+  run: () => Promise<void>
+): () => void {
+  let active = true;
+  let inFlight = false;
+
+  const tick = async () => {
+    if (!active || inFlight) {
+      return;
+    }
+
+    inFlight = true;
+
+    try {
+      await run();
+    } catch (error) {
+      if (process.env.NODE_ENV === "development") {
+        console.warn(`[useAdminRealtime] polling tick failed (${source})`, error);
+      }
+    } finally {
+      inFlight = false;
+    }
+  };
+
+  void tick();
+
+  const intervalId = window.setInterval(() => {
+    void tick();
+  }, firestorePollIntervalMs);
+
+  return () => {
+    active = false;
+    window.clearInterval(intervalId);
+  };
 }
 
 export interface ZoneOccupancyData {
@@ -97,6 +155,28 @@ export function useEventsFeed(feedLimit = 30): FeedResult<Event[]> {
   }, []);
 
   useEffect(() => {
+    if (!shouldUseRealtimeListeners) {
+      return startPolling("useEventsFeed", async () => {
+        try {
+          const events = await fetchEventsFeedFromApi(
+            Math.max(1, Math.floor(feedLimit))
+          );
+
+          setState({
+            data: events,
+            error: null,
+            resolved: true,
+          });
+        } catch (error) {
+          setState({
+            data: [],
+            error: getErrorMessage(error),
+            resolved: true,
+          });
+        }
+      });
+    }
+
     const eventsQuery = query(
       eventsCollection,
       orderBy("startTime", "desc"),
@@ -148,6 +228,28 @@ export function useChallengesFeed(feedLimit = 100): FeedResult<Challenge[]> {
   }, []);
 
   useEffect(() => {
+    if (!shouldUseRealtimeListeners) {
+      return startPolling("useChallengesFeed", async () => {
+        try {
+          const challenges = await fetchChallengesFeedFromApi(
+            Math.max(1, Math.floor(feedLimit))
+          );
+
+          setState({
+            data: challenges,
+            error: null,
+            resolved: true,
+          });
+        } catch (error) {
+          setState({
+            data: [],
+            error: getErrorMessage(error),
+            resolved: true,
+          });
+        }
+      });
+    }
+
     const challengesQuery = query(
       challengesCollection,
       orderBy("startTime", "desc"),
@@ -217,6 +319,28 @@ export function useTeamsByEvent(
   useEffect(() => {
     if (!eventId) {
       return;
+    }
+
+    if (!shouldUseRealtimeListeners) {
+      return startPolling("useTeamsByEvent", async () => {
+        try {
+          const teams = await fetchTeamsByEventFromApi(eventId);
+
+          setState({
+            key: eventId,
+            data: teams,
+            error: null,
+            resolved: true,
+          });
+        } catch (error) {
+          setState({
+            key: eventId,
+            data: [],
+            error: getErrorMessage(error),
+            resolved: true,
+          });
+        }
+      });
     }
 
     const teamsByEventQuery = query(teamsCollection, where("eventId", "==", eventId));
@@ -298,6 +422,30 @@ export function useZoneOccupancy(): FeedResult<ZoneOccupancyData> {
   }, []);
 
   useEffect(() => {
+    if (!shouldUseRealtimeListeners) {
+      return startPolling("useZoneOccupancy", async () => {
+        try {
+          const occupancy = await fetchZoneOccupancyFromApi();
+
+          setState({
+            data: {
+              byZone: occupancy.byZone,
+              totalActiveMembers: occupancy.totalActiveMembers,
+              updatedAtMillis: occupancy.updatedAtMillis,
+            },
+            error: null,
+            resolved: true,
+          });
+        } catch (error) {
+          setState((currentState) => ({
+            data: currentState.data,
+            error: getErrorMessage(error),
+            resolved: true,
+          }));
+        }
+      });
+    }
+
     const occupancyQuery = query(
       collectionGroup(db, "memberLocations"),
       where("isActive", "==", true)
