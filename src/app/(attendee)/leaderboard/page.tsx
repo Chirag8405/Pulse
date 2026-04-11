@@ -304,6 +304,7 @@ function LeaderboardPanel({
         icon={Trophy}
         title="No leaderboard data"
         description="Leaderboard standings will appear once challenge data starts streaming."
+        headingLevel={2}
       />
     );
   }

@@ -31,6 +31,21 @@ function getErrorMessage(error: unknown): string {
   return "Could not complete team assignment.";
 }
 
+interface PulseE2EWindow extends Window {
+  __PULSE_E2E_AUTH__?: {
+    uid: string;
+    isAdmin?: boolean;
+  };
+}
+
+function isMockE2EAuthSession(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  return Boolean((window as PulseE2EWindow).__PULSE_E2E_AUTH__);
+}
+
 export default function JoinPage() {
   const router = useRouter();
   const { user } = useAuth();
@@ -148,6 +163,10 @@ export default function JoinPage() {
     router.push("/dashboard");
     resetOnboarding();
 
+    if (isMockE2EAuthSession()) {
+      return;
+    }
+
     void joinTeam(userId, teamId).catch((error) => {
       toast.error(getErrorMessage(error));
     });
@@ -209,6 +228,8 @@ export default function JoinPage() {
     <AuthGuard>
       <section className="mx-auto flex min-h-[calc(100vh-11rem)] w-full max-w-3xl items-center justify-center px-4 py-8">
         <div className="nb-card w-full max-w-md bg-card p-6">
+          <h1 className="text-center text-3xl font-black tracking-tight">Join your team</h1>
+
           <div className="mb-5 flex items-center justify-center gap-2" aria-hidden="true">
             {[1, 2, 3].map((dot) => {
               const active = dot === step;
@@ -248,9 +269,9 @@ export default function JoinPage() {
           >
             {step === 1 ? (
               <div>
-                <h1 className="text-center text-3xl font-black tracking-tight">
+                <h2 className="text-center text-3xl font-black tracking-tight">
                   Enter your seat number
-                </h1>
+                </h2>
                 <p className="mt-2 text-center text-sm text-muted-foreground">
                   Found on your ticket. Format: Section-Row-Seat
                 </p>

@@ -9,7 +9,9 @@ describe("CountdownTimer", () => {
   });
 
   afterEach(() => {
-    vi.runOnlyPendingTimers();
+    act(() => {
+      vi.runOnlyPendingTimers();
+    });
     vi.useRealTimers();
   });
 
@@ -99,7 +101,9 @@ describe("CountdownTimer", () => {
       unmount = rendered.unmount;
     });
 
-    unmount();
+    act(() => {
+      unmount();
+    });
 
     expect(clearIntervalSpy).toHaveBeenCalled();
     clearIntervalSpy.mockRestore();

@@ -7,6 +7,7 @@ interface EmptyStateProps {
   icon: LucideIcon;
   title: string;
   description: string;
+  headingLevel?: 2 | 3;
   action?: {
     label: string;
     onClick: () => void;
@@ -17,13 +18,16 @@ export function EmptyState({
   icon: Icon,
   title,
   description,
+  headingLevel = 3,
   action,
 }: EmptyStateProps) {
+  const HeadingTag = headingLevel === 2 ? "h2" : "h3";
+
   return (
     <div className="flex min-h-[320px] items-center justify-center" role="status" aria-live="polite">
       <div className="w-full max-w-xl border-2 border-dashed border-border bg-card p-12 text-center">
         <Icon className="mx-auto size-12 text-muted-foreground" aria-hidden="true" />
-        <h3 className="mt-4 text-lg font-bold">{title}</h3>
+        <HeadingTag className="mt-4 text-lg font-bold">{title}</HeadingTag>
         <p className="mt-2 text-sm text-muted-foreground">{description}</p>
 
         {action ? (

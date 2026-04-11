@@ -43,11 +43,8 @@ export function useAuth(): UseAuthResult {
   const setLoading = useAuthStore((state) => state.setLoading);
 
   const [error, setError] = useState<string | null>(null);
-
-  const e2eAuth =
-    typeof window !== "undefined"
-      ? ((window as PulseE2EWindow).__PULSE_E2E_AUTH__ ?? null)
-      : null;
+  const [e2eAuth, setE2EAuth] = useState<PulseE2EAuthPayload | null>(null);
+  const [hasResolvedE2EAuth, setHasResolvedE2EAuth] = useState(false);
 
   const handleAuthChange = useCallback(
     async (firebaseUser: FirebaseUser | null) => {
@@ -76,6 +73,19 @@ export function useAuth(): UseAuthResult {
   );
 
   useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    setE2EAuth((window as PulseE2EWindow).__PULSE_E2E_AUTH__ ?? null);
+    setHasResolvedE2EAuth(true);
+  }, []);
+
+  useEffect(() => {
+    if (!hasResolvedE2EAuth) {
+      return;
+    }
+
     if (e2eAuth) {
       return;
     }
@@ -89,7 +99,18 @@ export function useAuth(): UseAuthResult {
     return () => {
       unsubscribe();
     };
-  }, [e2eAuth, handleAuthChange, setLoading]);
+  }, [e2eAuth, handleAuthChange, hasResolvedE2EAuth, setLoading]);
+
+  if (!hasResolvedE2EAuth) {
+    return {
+      user: null,
+      firestoreUser: null,
+      loading: true,
+      error: null,
+      isAdmin: false,
+      isAuthenticated: false,
+    };
+  }
 
   if (e2eAuth) {
     return {
