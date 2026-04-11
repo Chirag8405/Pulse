@@ -1,4 +1,4 @@
-import { ZONES, type ZoneId } from "@/constants";
+import type { ZoneId } from "@/constants";
 
 export interface TeamMapping {
   id: string;
@@ -16,7 +16,7 @@ export const TEAM_MAPPINGS: TeamMapping[] = [
     name: "North Stand Wolves",
     emoji: "🐺",
     colorHex: "#2563EB",
-    sectionPattern: /^[A-B]$/,
+    sectionPattern: /^[A-C]$/,
   },
   {
     id: "team-south-lions",
@@ -24,80 +24,77 @@ export const TEAM_MAPPINGS: TeamMapping[] = [
     name: "South Stand Lions",
     emoji: "🦁",
     colorHex: "#DC2626",
-    sectionPattern: /^[C-D]$/,
+    sectionPattern: /^[D-F]$/,
   },
   {
-    id: "team-east-falcons",
+    id: "team-east-eagles",
     zoneId: "zone-east",
-    name: "East Stand Falcons",
+    name: "East Stand Eagles",
     emoji: "🦅",
-    colorHex: "#F59E0B",
-    sectionPattern: /^[E-F]$/,
+    colorHex: "#059669",
+    sectionPattern: /^[G-I]$/,
   },
   {
-    id: "team-west-sharks",
+    id: "team-west-rhinos",
     zoneId: "zone-west",
-    name: "West Stand Sharks",
-    emoji: "🦈",
-    colorHex: "#0EA5E9",
-    sectionPattern: /^[G-H]$/,
+    name: "West Stand Rhinos",
+    emoji: "🦏",
+    colorHex: "#7C3AED",
+    sectionPattern: /^[J-L]$/,
   },
   {
-    id: "team-concourse-n-hawks",
+    id: "team-north-bears",
     zoneId: "zone-concourse-n",
-    name: "North Concourse Hawks",
-    emoji: "🦉",
-    colorHex: "#10B981",
-    sectionPattern: /^[J-K]$/,
+    name: "North Concourse Bears",
+    emoji: "🐻",
+    colorHex: "#D97706",
+    sectionPattern: /^[M-O]$/,
   },
   {
-    id: "team-concourse-s-tigers",
+    id: "team-south-tigers",
     zoneId: "zone-concourse-s",
     name: "South Concourse Tigers",
     emoji: "🐯",
-    colorHex: "#FB7185",
-    sectionPattern: /^[L-M]$/,
+    colorHex: "#DB2777",
+    sectionPattern: /^[P-R]$/,
   },
   {
-    id: "team-entry-main-rhinos",
+    id: "team-main-wolves",
     zoneId: "zone-entry-main",
-    name: "Main Entry Rhinos",
-    emoji: "🦏",
-    colorHex: "#7C3AED",
-    sectionPattern: /^[N-P]$/,
+    name: "Main Entry Wolves",
+    emoji: "🐺",
+    colorHex: "#0891B2",
+    sectionPattern: /^[S-U]$/,
   },
   {
-    id: "team-entry-sec-panthers",
+    id: "team-general",
     zoneId: "zone-entry-sec",
-    name: "Secondary Entry Panthers",
-    emoji: "🐆",
-    colorHex: "#059669",
-    sectionPattern: /^[Q-Z]{1,2}$/,
+    name: "General Stand Crew",
+    emoji: "🏟️",
+    colorHex: "#374151",
+    sectionPattern: /^$/,
   },
 ];
-
-const ZONE_IDS = new Set(ZONES.map((zone) => zone.id));
 
 export function getTeamForSeatSection(
   seatSection: string
 ): TeamMapping | null {
-  const normalized = seatSection.toUpperCase();
+  const normalized = seatSection.trim().toUpperCase();
+  const sectionLetter = normalized.slice(0, 1);
 
-  const matchingTeam = TEAM_MAPPINGS.find((team) =>
-    team.sectionPattern.test(normalized)
+  if (!sectionLetter) {
+    return null;
+  }
+
+  const fallbackTeam = TEAM_MAPPINGS[TEAM_MAPPINGS.length - 1] ?? null;
+
+  const matchingTeam = TEAM_MAPPINGS.slice(0, -1).find((team) =>
+    team.sectionPattern.test(sectionLetter)
   );
 
   if (matchingTeam) {
     return matchingTeam;
   }
-
-  if (normalized.length === 0) {
-    return null;
-  }
-
-  const orderedTeams = TEAM_MAPPINGS.filter((team) => ZONE_IDS.has(team.zoneId));
-  const seed = normalized.charCodeAt(0);
-  const fallbackTeam = orderedTeams[seed % orderedTeams.length];
 
   return fallbackTeam ?? null;
 }

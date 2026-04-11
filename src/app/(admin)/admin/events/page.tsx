@@ -1,7 +1,7 @@
 "use client";
 
 import { type FormEvent, useMemo, useState } from "react";
-import { Timestamp, doc, updateDoc, writeBatch } from "firebase/firestore";
+import { Timestamp, doc, setDoc, updateDoc } from "firebase/firestore";
 import { toast } from "sonner";
 import { AuthGuard } from "@/components/layout/AuthGuard";
 import { Badge } from "@/components/ui/badge";
@@ -23,53 +23,24 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { VENUE_CITY, VENUE_NAME } from "@/constants";
-import { TEAM_MAPPINGS } from "@/constants/teams";
 import { useEventsFeed } from "@/hooks/useAdminRealtime";
 import { logVenueAnalyticsEvent } from "@/lib/firebase/analytics";
-import { db } from "@/lib/firebase/config";
-import { eventDoc, eventsCollection, teamsCollection } from "@/lib/firebase/collections";
-import type { Event, Team } from "@/types/firebase";
+import { eventDoc, eventsCollection } from "@/lib/firebase/collections";
+import type { Event } from "@/types/firebase";
 
 interface EventFormValues {
-  title: string;
   homeTeam: string;
   awayTeam: string;
   startTimeInput: string;
+  matchDay: string;
 }
 
 const INITIAL_EVENT_FORM: EventFormValues = {
-  title: "",
   homeTeam: "",
   awayTeam: "",
   startTimeInput: "",
+  matchDay: "",
 };
-
-const TEAM_SECTION_IDS: Record<string, string[]> = {
-  "team-north-wolves": ["A", "B"],
-  "team-south-lions": ["C", "D"],
-  "team-east-falcons": ["E", "F"],
-  "team-west-sharks": ["G", "H"],
-  "team-concourse-n-hawks": ["J", "K"],
-  "team-concourse-s-tigers": ["L", "M"],
-  "team-entry-main-rhinos": ["N", "O", "P"],
-  "team-entry-sec-panthers": ["Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"],
-};
-
-function buildTeamsForEvent(eventId: string, now: Timestamp): Team[] {
-  return TEAM_MAPPINGS.map((mapping) => ({
-    id: mapping.id,
-    name: mapping.name,
-    colorHex: mapping.colorHex,
-    emoji: mapping.emoji,
-    venueId: VENUE_NAME,
-    eventId,
-    memberIds: [],
-    currentSpreadScore: 0,
-    lastCalculatedAt: now,
-    totalChallengesWon: 0,
-    sectionIds: TEAM_SECTION_IDS[mapping.id] ?? [],
-  }));
-}
 
 function getStatusBadgeClass(status: Event["status"]): string {
   if (status === "live") {
@@ -81,14 +52,14 @@ function getStatusBadgeClass(status: Event["status"]): string {
   }
 
   if (status === "completed") {
-    return "rounded-none border-2 border-border bg-emerald-600 px-2 py-1 text-xs font-bold text-white";
+    return "rounded-none border-2 border-border bg-muted px-2 py-1 text-xs font-bold text-foreground";
   }
 
-  return "rounded-none border-2 border-border bg-muted px-2 py-1 text-xs font-bold text-foreground";
+  return "rounded-none border-2 border-border bg-zinc-200 px-2 py-1 text-xs font-bold text-black dark:bg-zinc-800 dark:text-foreground";
 }
 
 function AdminEventsContent() {
-  const { data: events, loading, error } = useEventsFeed(60);
+  const { data: events, loading, error } = useEventsFeed(100);
 
   const [formValues, setFormValues] = useState<EventFormValues>(INITIAL_EVENT_FORM);
   const [isCreating, setIsCreating] = useState(false);
@@ -101,16 +72,23 @@ function AdminEventsContent() {
     );
   }, [events]);
 
+  const hasAnotherLiveEvent = (eventId: string) =>
+    events.some(
+      (eventItem) =>
+        eventItem.id !== eventId &&
+        (eventItem.status === "live" || eventItem.status === "halftime")
+    );
+
   const handleCreateEvent = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     if (
-      !formValues.title.trim() ||
       !formValues.homeTeam.trim() ||
       !formValues.awayTeam.trim() ||
-      !formValues.startTimeInput
+      !formValues.startTimeInput ||
+      !formValues.matchDay.trim()
     ) {
-      toast.error("Please fill all event fields.");
+      toast.error("Please complete all event fields.");
       return;
     }
 
@@ -125,32 +103,22 @@ function AdminEventsContent() {
 
     try {
       const eventReference = doc(eventsCollection);
-      const startTime = Timestamp.fromDate(parsedStart);
-      const now = Timestamp.now();
 
       const eventPayload: Event = {
         id: eventReference.id,
-        title: formValues.title.trim(),
         venueName: VENUE_NAME,
         venueCity: VENUE_CITY,
         homeTeam: formValues.homeTeam.trim(),
         awayTeam: formValues.awayTeam.trim(),
-        startTime,
+        startTime: Timestamp.fromDate(parsedStart),
         status: "upcoming",
         currentChallengeId: null,
-        matchDay: parsedStart.toLocaleDateString(),
+        matchDay: formValues.matchDay.trim(),
+        title: `${formValues.homeTeam.trim()} vs ${formValues.awayTeam.trim()}`,
       };
 
-      const teams = buildTeamsForEvent(eventReference.id, now);
-      const batch = writeBatch(db);
-
-      batch.set(eventReference, eventPayload);
-      teams.forEach((team) => {
-        batch.set(doc(teamsCollection, team.id), team);
-      });
-
-      await batch.commit();
-      toast.success("Event created and teams initialized.");
+      await setDoc(eventReference, eventPayload);
+      toast.success("Event created successfully.");
       setFormValues(INITIAL_EVENT_FORM);
     } catch (createError) {
       const message = createError instanceof Error ? createError.message : "Could not create event.";
@@ -163,8 +131,17 @@ function AdminEventsContent() {
   const handleStatusChange = async (
     eventItem: Event,
     nextStatus: Event["status"],
-    analyticsEventName: "event_started" | "event_halftime" | "event_ended"
+    options?: {
+      analyticsEvent?: "event_started" | "event_halftime" | "event_ended";
+      successToast?: string;
+      suggestionToast?: string;
+    }
   ) => {
+    if (nextStatus === "live" && hasAnotherLiveEvent(eventItem.id)) {
+      toast.error("Another event is already live. End it before starting a new one.");
+      return;
+    }
+
     setUpdatingEventId(eventItem.id);
 
     try {
@@ -172,12 +149,20 @@ function AdminEventsContent() {
         status: nextStatus,
       });
 
-      logVenueAnalyticsEvent(analyticsEventName, {
-        eventId: eventItem.id,
-        status: nextStatus,
-      });
+      if (options?.analyticsEvent) {
+        logVenueAnalyticsEvent(options.analyticsEvent, {
+          eventId: eventItem.id,
+          status: nextStatus,
+        });
+      }
 
-      toast.success(`Event status changed to ${nextStatus}.`);
+      if (options?.successToast) {
+        toast.success(options.successToast);
+      }
+
+      if (options?.suggestionToast) {
+        toast(options.suggestionToast);
+      }
     } catch (updateError) {
       const message = updateError instanceof Error ? updateError.message : "Could not update event status.";
       toast.error(message);
@@ -191,7 +176,7 @@ function AdminEventsContent() {
       <header>
         <h1 className="text-3xl font-black tracking-tight">Event Management</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Schedule events and control match state transitions in realtime.
+          Create events and control live match state transitions.
         </p>
       </header>
 
@@ -199,41 +184,6 @@ function AdminEventsContent() {
         <h2 className="text-xl font-black tracking-tight">Create Event</h2>
 
         <form className="mt-4 grid gap-3 md:grid-cols-2" onSubmit={handleCreateEvent}>
-          <div>
-            <label className="mb-1 block text-sm font-bold" htmlFor="event-title">
-              Title
-            </label>
-            <Input
-              id="event-title"
-              value={formValues.title}
-              onChange={(changeEvent) =>
-                setFormValues((currentValues) => ({
-                  ...currentValues,
-                  title: changeEvent.target.value,
-                }))
-              }
-              className="rounded-none border-2 border-border"
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-sm font-bold" htmlFor="event-start">
-              Start Time
-            </label>
-            <Input
-              id="event-start"
-              type="datetime-local"
-              value={formValues.startTimeInput}
-              onChange={(changeEvent) =>
-                setFormValues((currentValues) => ({
-                  ...currentValues,
-                  startTimeInput: changeEvent.target.value,
-                }))
-              }
-              className="rounded-none border-2 border-border"
-            />
-          </div>
-
           <div>
             <label className="mb-1 block text-sm font-bold" htmlFor="event-home-team">
               Home Team
@@ -268,6 +218,41 @@ function AdminEventsContent() {
             />
           </div>
 
+          <div>
+            <label className="mb-1 block text-sm font-bold" htmlFor="event-start-time">
+              Start Time
+            </label>
+            <Input
+              id="event-start-time"
+              type="datetime-local"
+              value={formValues.startTimeInput}
+              onChange={(changeEvent) =>
+                setFormValues((currentValues) => ({
+                  ...currentValues,
+                  startTimeInput: changeEvent.target.value,
+                }))
+              }
+              className="rounded-none border-2 border-border"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-bold" htmlFor="event-match-day">
+              Match Day Label
+            </label>
+            <Input
+              id="event-match-day"
+              value={formValues.matchDay}
+              onChange={(changeEvent) =>
+                setFormValues((currentValues) => ({
+                  ...currentValues,
+                  matchDay: changeEvent.target.value,
+                }))
+              }
+              className="rounded-none border-2 border-border"
+            />
+          </div>
+
           <div className="md:col-span-2">
             <Button
               type="submit"
@@ -286,8 +271,8 @@ function AdminEventsContent() {
         <Table aria-label="Event management table">
           <TableHeader>
             <TableRow>
-              <TableHead>Event</TableHead>
               <TableHead>Fixture</TableHead>
+              <TableHead>Match Day</TableHead>
               <TableHead>Start</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Controls</TableHead>
@@ -296,15 +281,13 @@ function AdminEventsContent() {
           <TableBody>
             {sortedEvents.map((eventItem) => (
               <TableRow key={eventItem.id}>
-                <TableCell>
-                  <p className="font-bold">{eventItem.title ?? "Untitled Event"}</p>
+                <TableCell className="font-semibold">
+                  {eventItem.homeTeam} vs {eventItem.awayTeam}
                   <p className="font-mono text-xs text-muted-foreground">
                     {eventItem.venueName}, {eventItem.venueCity}
                   </p>
                 </TableCell>
-                <TableCell className="font-semibold">
-                  {eventItem.homeTeam} vs {eventItem.awayTeam}
-                </TableCell>
+                <TableCell>{eventItem.matchDay}</TableCell>
                 <TableCell className="font-mono text-xs">
                   {eventItem.startTime.toDate().toLocaleString()}
                 </TableCell>
@@ -320,7 +303,10 @@ function AdminEventsContent() {
                         type="button"
                         size="sm"
                         onClick={() =>
-                          void handleStatusChange(eventItem, "live", "event_started")
+                          void handleStatusChange(eventItem, "live", {
+                            analyticsEvent: "event_started",
+                            successToast: "Event is now live.",
+                          })
                         }
                         disabled={updatingEventId === eventItem.id}
                         className="nb-btn rounded-none border-2 border-border bg-primary px-2 py-1 text-xs font-bold text-primary-foreground"
@@ -335,11 +321,11 @@ function AdminEventsContent() {
                         size="sm"
                         variant="outline"
                         onClick={() =>
-                          void handleStatusChange(
-                            eventItem,
-                            "halftime",
-                            "event_halftime"
-                          )
+                          void handleStatusChange(eventItem, "halftime", {
+                            analyticsEvent: "event_halftime",
+                            successToast: "Event moved to halftime.",
+                            suggestionToast: "Consider launching a halftime challenge now",
+                          })
                         }
                         disabled={updatingEventId === eventItem.id}
                         className="nb-btn rounded-none border-2 border-border bg-card px-2 py-1 text-xs font-bold"
@@ -348,7 +334,24 @@ function AdminEventsContent() {
                       </Button>
                     ) : null}
 
-                    {eventItem.status === "live" || eventItem.status === "halftime" ? (
+                    {eventItem.status === "halftime" ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          void handleStatusChange(eventItem, "live", {
+                            successToast: "Event resumed to live.",
+                          })
+                        }
+                        disabled={updatingEventId === eventItem.id}
+                        className="nb-btn rounded-none border-2 border-border bg-card px-2 py-1 text-xs font-bold"
+                      >
+                        Resume Live
+                      </Button>
+                    ) : null}
+
+                    {(eventItem.status === "live" || eventItem.status === "halftime") ? (
                       <Button
                         type="button"
                         size="sm"
@@ -380,7 +383,7 @@ function AdminEventsContent() {
           <DialogHeader>
             <DialogTitle className="text-xl font-black tracking-tight">End event now?</DialogTitle>
             <DialogDescription>
-              This will mark the selected event as completed for all attendees.
+              This will mark the selected event as completed.
             </DialogDescription>
           </DialogHeader>
 
@@ -402,12 +405,15 @@ function AdminEventsContent() {
                   return;
                 }
 
-                void handleStatusChange(eventToEnd, "completed", "event_ended");
+                void handleStatusChange(eventToEnd, "completed", {
+                  analyticsEvent: "event_ended",
+                  successToast: "Event ended.",
+                });
                 setEventToEnd(null);
               }}
               disabled={Boolean(eventToEnd && updatingEventId === eventToEnd.id)}
             >
-              Confirm End
+              End Event
             </Button>
           </div>
         </DialogContent>

@@ -108,6 +108,44 @@ function hasAdminClaim(decodedToken: AdminClaims): boolean {
   return hasAdminRoleValue(decodedToken.role);
 }
 
+async function getLegacyUserByEmail(
+  email: string | null | undefined,
+  uid: string
+): Promise<Partial<UserBootstrapDoc> | null> {
+  if (!email) {
+    return null;
+  }
+
+  const normalizedEmail = email.trim().toLowerCase();
+
+  if (!normalizedEmail) {
+    return null;
+  }
+
+  const usersCollection = adminDb.collection("users");
+
+  const emailDocSnapshot = await usersCollection.doc(normalizedEmail).get();
+  if (emailDocSnapshot.exists && emailDocSnapshot.id !== uid) {
+    return emailDocSnapshot.data() as Partial<UserBootstrapDoc>;
+  }
+
+  const candidateEmails = new Set([email, normalizedEmail]);
+
+  for (const candidateEmail of candidateEmails) {
+    const querySnapshot = await usersCollection
+      .where("email", "==", candidateEmail)
+      .limit(1)
+      .get();
+
+    const legacyDocSnapshot = querySnapshot.docs.find((doc) => doc.id !== uid);
+    if (legacyDocSnapshot) {
+      return legacyDocSnapshot.data() as Partial<UserBootstrapDoc>;
+    }
+  }
+
+  return null;
+}
+
 export async function POST(request: NextRequest) {
   const token = getBearerToken(request);
 
@@ -122,9 +160,14 @@ export async function POST(request: NextRequest) {
 
     const userReference = adminDb.collection("users").doc(uid);
     const userSnapshot = await userReference.get();
+
+    const legacyData = userSnapshot.exists
+      ? null
+      : await getLegacyUserByEmail(decodedToken.email, uid);
+
     const existingData = userSnapshot.exists
       ? (userSnapshot.data() as Partial<UserBootstrapDoc>)
-      : null;
+      : legacyData;
 
     const allowlistedAdmin = normalizedEmail.length > 0 && ADMIN_EMAILS.has(normalizedEmail);
 

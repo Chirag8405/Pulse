@@ -1,19 +1,24 @@
 "use client";
 
 import { useMemo } from "react";
+import { getDocs, orderBy, query } from "firebase/firestore";
+import { useQuery } from "@tanstack/react-query";
 import { Trophy } from "lucide-react";
 import { AuthGuard } from "@/components/layout/AuthGuard";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { TeamBadge } from "@/components/shared/TeamBadge";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TEAM_MAPPINGS } from "@/constants/teams";
 import { useActiveChallenge } from "@/hooks/useActiveChallenge";
 import { useActiveEvent } from "@/hooks/useActiveEvent";
+import { useChallengesFeed } from "@/hooks/useAdminRealtime";
 import { useAuth } from "@/hooks/useAuth";
 import { useLeaderboard } from "@/hooks/useLeaderboard";
+import { teamsCollection } from "@/lib/firebase/collections";
 import { cn } from "@/lib/utils";
-import type { ChallengeTeamProgress } from "@/types/firebase";
+import type { ChallengeTeamProgress, Team } from "@/types/firebase";
 
 interface LeaderboardRowData {
   id: string;
@@ -23,7 +28,6 @@ interface LeaderboardRowData {
   teamColorHex: string;
   spreadScore: number;
   challengesWon: number;
-  sparkline: number[];
 }
 
 function getRankLabel(rank: number): string {
@@ -39,29 +43,7 @@ function getRankLabel(rank: number): string {
   return String(rank);
 }
 
-function getRankAnnouncement(rank: number, teamName: string): string {
-  const mod10 = rank % 10;
-  const mod100 = rank % 100;
-  const suffix =
-    mod10 === 1 && mod100 !== 11
-      ? "st"
-      : mod10 === 2 && mod100 !== 12
-        ? "nd"
-        : mod10 === 3 && mod100 !== 13
-          ? "rd"
-          : "th";
-
-  return `${rank}${suffix} place, ${teamName}`;
-}
-
-function createSparkline(score: number, seed: number): number[] {
-  return Array.from({ length: 5 }, (_, index) => {
-    const delta = ((seed + index * 7) % 9) - 4;
-    return Math.max(30, Math.min(98, Math.round(score + delta)));
-  });
-}
-
-function mapTeamPresentation(teamId: string, fallbackSeed: number) {
+function getTeamPresentation(teamId: string, fallbackIndex: number) {
   const mappedTeam = TEAM_MAPPINGS.find((team) => team.id === teamId);
 
   if (mappedTeam) {
@@ -72,10 +54,10 @@ function mapTeamPresentation(teamId: string, fallbackSeed: number) {
     };
   }
 
-  const fallbackTeam = TEAM_MAPPINGS[fallbackSeed % Math.max(1, TEAM_MAPPINGS.length)];
+  const fallbackTeam = TEAM_MAPPINGS[fallbackIndex % Math.max(1, TEAM_MAPPINGS.length)];
 
   return {
-    name: fallbackTeam?.name ?? `Team ${fallbackSeed + 1}`,
+    name: fallbackTeam?.name ?? `Team ${fallbackIndex + 1}`,
     emoji: fallbackTeam?.emoji ?? "🏟",
     colorHex: fallbackTeam?.colorHex ?? "#2563EB",
   };
@@ -85,7 +67,7 @@ function mapEventRows(sourceRows: ChallengeTeamProgress[]): LeaderboardRowData[]
   return [...sourceRows]
     .sort((left, right) => right.spreadScore - left.spreadScore)
     .map((row, index) => {
-      const teamDisplay = mapTeamPresentation(row.teamId, index);
+      const teamDisplay = getTeamPresentation(row.teamId, index);
 
       return {
         id: `event-${row.teamId}-${index}`,
@@ -95,134 +77,26 @@ function mapEventRows(sourceRows: ChallengeTeamProgress[]): LeaderboardRowData[]
         teamColorHex: teamDisplay.colorHex,
         spreadScore: Math.round(row.spreadScore),
         challengesWon: row.isCompleted ? 1 : 0,
-        sparkline: createSparkline(row.spreadScore, index),
       };
     });
 }
 
-function buildAllTimeRows(): LeaderboardRowData[] {
-  const fallbackTeam = TEAM_MAPPINGS[0];
-  const rows: LeaderboardRowData[] = [];
+function mapAllTimeRows(sourceTeams: Team[]): LeaderboardRowData[] {
+  return [...sourceTeams]
+    .sort((left, right) => right.totalChallengesWon - left.totalChallengesWon)
+    .map((team, index) => {
+      const mappedTeam = TEAM_MAPPINGS.find((candidate) => candidate.id === team.id);
 
-  for (let index = 0; index < 80; index += 1) {
-    const mappedTeam = TEAM_MAPPINGS[index % Math.max(1, TEAM_MAPPINGS.length)] ?? fallbackTeam;
-
-    rows.push({
-      id: `all-time-${index}`,
-      teamId: `${mappedTeam?.id ?? "team"}-${index}`,
-      teamName: `${mappedTeam?.name ?? "Team"} ${Math.floor(index / 8) + 1}`,
-      teamEmoji: mappedTeam?.emoji ?? "🏟",
-      teamColorHex: mappedTeam?.colorHex ?? "#2563EB",
-      spreadScore: Math.max(35, 97 - Math.floor(index * 0.75)),
-      challengesWon: Math.max(1, 24 - Math.floor(index / 4)),
-      sparkline: createSparkline(92 - Math.floor(index * 0.5), index + 4),
+      return {
+        id: `all-${team.id}`,
+        teamId: team.id,
+        teamName: team.name ?? mappedTeam?.name ?? `Team ${index + 1}`,
+        teamEmoji: team.emoji ?? mappedTeam?.emoji ?? "🏟",
+        teamColorHex: team.colorHex ?? mappedTeam?.colorHex ?? "#2563EB",
+        spreadScore: Math.round(team.currentSpreadScore),
+        challengesWon: team.totalChallengesWon,
+      };
     });
-  }
-
-  return rows.sort((left, right) => right.spreadScore - left.spreadScore);
-}
-
-function MiniSparkline({ values }: { values: number[] }) {
-  return (
-    <svg width="30" height="16" viewBox="0 0 30 16" aria-hidden="true">
-      {values.map((value, index) => {
-        const normalized = Math.max(2, Math.round((value / 100) * 14));
-        const x = index * 6;
-        const y = 16 - normalized;
-
-        return (
-          <rect key={index} x={x} y={y} width="4" height={normalized} fill="currentColor" />
-        );
-      })}
-    </svg>
-  );
-}
-
-function DesktopLeaderboardRow({
-  row,
-  rank,
-  isYourTeam,
-}: {
-  row: LeaderboardRowData;
-  rank: number;
-  isYourTeam: boolean;
-}) {
-  return (
-    <tr
-      className={cn(
-        "border-b border-border align-middle",
-        rank % 2 === 0
-          ? "bg-white text-black dark:bg-zinc-950 dark:text-foreground"
-          : "bg-zinc-50 text-black dark:bg-zinc-900 dark:text-foreground",
-        isYourTeam && "outline-2 outline-black"
-      )}
-    >
-      <th scope="row" className="px-3 py-2 text-left font-mono text-sm font-bold">
-        <span aria-hidden="true">{getRankLabel(rank)}</span>
-        <span className="sr-only">{getRankAnnouncement(rank, row.teamName)}</span>
-      </th>
-      <td className="px-3 py-2">
-        <TeamBadge
-          teamName={row.teamName}
-          emoji={row.teamEmoji}
-          colorHex={row.teamColorHex}
-          size="sm"
-        />
-      </td>
-      <td className="px-3 py-2 font-mono text-sm font-bold">
-        <span className="inline-flex items-center gap-2">
-          {row.spreadScore}%
-          <MiniSparkline values={row.sparkline} />
-        </span>
-      </td>
-      <td className="px-3 py-2">
-        <Badge className="rounded-none border-2 border-border bg-muted px-2 py-1 text-xs font-bold text-foreground">
-          {row.challengesWon}
-        </Badge>
-      </td>
-    </tr>
-  );
-}
-
-function MobileLeaderboardCard({
-  row,
-  rank,
-  isYourTeam,
-}: {
-  row: LeaderboardRowData;
-  rank: number;
-  isYourTeam: boolean;
-}) {
-  return (
-    <article
-      className={cn(
-        "nb-card space-y-3 p-4",
-        isYourTeam && "border-2 border-black shadow-[var(--nb-shadow-sm)]"
-      )}
-    >
-      <div className="flex items-center justify-between">
-        <span className="font-mono text-sm font-bold" aria-hidden="true">
-          {getRankLabel(rank)}
-        </span>
-        <span className="sr-only">{getRankAnnouncement(rank, row.teamName)}</span>
-        <Badge className="rounded-none border-2 border-border bg-muted px-2 py-1 text-xs font-bold text-foreground">
-          {row.challengesWon} won
-        </Badge>
-      </div>
-
-      <TeamBadge
-        teamName={row.teamName}
-        emoji={row.teamEmoji}
-        colorHex={row.teamColorHex}
-        size="sm"
-      />
-
-      <p className="inline-flex items-center gap-2 font-mono text-sm font-bold">
-        Spread {row.spreadScore}%
-        <MiniSparkline values={row.sparkline} />
-      </p>
-    </article>
-  );
 }
 
 function LeaderboardSkeletonRows() {
@@ -252,58 +126,45 @@ function LeaderboardSkeletonRows() {
   );
 }
 
-function LeaderboardTable({
-  rows,
-  yourTeamId,
-}: {
-  rows: LeaderboardRowData[];
-  yourTeamId: string | null;
-}) {
-  return (
-    <section className="nb-card overflow-hidden bg-card">
-      <table className="w-full" aria-label="Team leaderboard table">
-        <thead className="bg-black text-xs font-bold uppercase tracking-wider text-white">
-          <tr>
-            <th scope="col" className="px-3 py-3 text-left">Rank</th>
-            <th scope="col" className="px-3 py-3 text-left">Team</th>
-            <th scope="col" className="px-3 py-3 text-left">Spread Score</th>
-            <th scope="col" className="px-3 py-3 text-left">Challenges Won</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, index) => (
-            <DesktopLeaderboardRow
-              key={row.id}
-              row={row}
-              rank={index + 1}
-              isYourTeam={yourTeamId === row.teamId}
-            />
-          ))}
-        </tbody>
-      </table>
-    </section>
-  );
-}
-
 function LeaderboardPanel({
   rows,
   loading,
+  error,
   yourTeamId,
+  emptyMessage,
 }: {
   rows: LeaderboardRowData[];
   loading: boolean;
+  error: string | null;
   yourTeamId: string | null;
+  emptyMessage: string;
 }) {
   if (loading) {
     return <LeaderboardSkeletonRows />;
+  }
+
+  if (error) {
+    return (
+      <section className="nb-card border-destructive bg-card p-4">
+        <p className="font-mono text-xs text-destructive">{error}</p>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => window.location.reload()}
+          className="nb-btn mt-3 rounded-none border-2 border-border bg-card font-bold"
+        >
+          Retry
+        </Button>
+      </section>
+    );
   }
 
   if (rows.length === 0) {
     return (
       <EmptyState
         icon={Trophy}
-        title="No leaderboard data"
-        description="Leaderboard standings will appear once challenge data starts streaming."
+        title={emptyMessage}
+        description="Check back once challenge data starts streaming."
         headingLevel={2}
       />
     );
@@ -311,19 +172,85 @@ function LeaderboardPanel({
 
   return (
     <>
-      <div className="hidden md:block">
-        <LeaderboardTable rows={rows} yourTeamId={yourTeamId} />
-      </div>
+      <section className="nb-card hidden overflow-hidden bg-card md:block">
+        <table className="w-full" aria-label="Team leaderboard table">
+          <thead className="bg-black text-xs font-bold uppercase tracking-wider text-white">
+            <tr>
+              <th scope="col" className="px-3 py-3 text-left">Rank</th>
+              <th scope="col" className="px-3 py-3 text-left">Team</th>
+              <th scope="col" className="px-3 py-3 text-left">Spread Score</th>
+              <th scope="col" className="px-3 py-3 text-left">Challenges Won</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, index) => {
+              const isYourTeam = yourTeamId === row.teamId;
+
+              return (
+                <tr
+                  key={row.id}
+                  className={cn(
+                    "border-b border-border align-middle",
+                    index % 2 === 0
+                      ? "bg-white text-black dark:bg-zinc-950 dark:text-foreground"
+                      : "bg-zinc-50 text-black dark:bg-zinc-900 dark:text-foreground",
+                    isYourTeam && "border-l-4 border-l-blue-600"
+                  )}
+                >
+                  <th scope="row" className="px-3 py-2 text-left font-mono text-sm font-bold">
+                    <span aria-hidden="true">{getRankLabel(index + 1)}</span>
+                  </th>
+                  <td className="px-3 py-2">
+                    <TeamBadge
+                      teamName={row.teamName}
+                      emoji={row.teamEmoji}
+                      colorHex={row.teamColorHex}
+                      size="sm"
+                    />
+                  </td>
+                  <td className="px-3 py-2 font-mono text-sm font-bold">{row.spreadScore}%</td>
+                  <td className="px-3 py-2">
+                    <Badge className="rounded-none border-2 border-border bg-muted px-2 py-1 text-xs font-bold text-foreground">
+                      {row.challengesWon}
+                    </Badge>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </section>
 
       <div className="space-y-3 md:hidden">
-        {rows.slice(0, 20).map((row, index) => (
-          <MobileLeaderboardCard
-            key={row.id}
-            row={row}
-            rank={index + 1}
-            isYourTeam={yourTeamId === row.teamId}
-          />
-        ))}
+        {rows.map((row, index) => {
+          const isYourTeam = yourTeamId === row.teamId;
+
+          return (
+            <article
+              key={row.id}
+              className={cn(
+                "nb-card space-y-3 p-4",
+                isYourTeam && "border-2 border-blue-600"
+              )}
+            >
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-sm font-bold">{getRankLabel(index + 1)}</span>
+                <Badge className="rounded-none border-2 border-border bg-muted px-2 py-1 text-xs font-bold text-foreground">
+                  {row.challengesWon} won
+                </Badge>
+              </div>
+
+              <TeamBadge
+                teamName={row.teamName}
+                emoji={row.teamEmoji}
+                colorHex={row.teamColorHex}
+                size="sm"
+              />
+
+              <p className="font-mono text-sm font-bold">Spread {row.spreadScore}%</p>
+            </article>
+          );
+        })}
       </div>
     </>
   );
@@ -331,20 +258,53 @@ function LeaderboardPanel({
 
 function LeaderboardContent() {
   const { firestoreUser } = useAuth();
-  const { data: activeEvent } = useActiveEvent();
-  const { data: activeChallenge, loading: challengeLoading } = useActiveChallenge(
-    activeEvent?.id
-  );
-  const { data: eventLeaderboardRows, loading: eventLoading } = useLeaderboard(
-    activeChallenge?.id
-  );
+  const { data: activeEvent, loading: activeEventLoading, error: activeEventError } =
+    useActiveEvent();
+  const {
+    data: activeChallenge,
+    loading: activeChallengeLoading,
+    error: activeChallengeError,
+  } = useActiveChallenge(activeEvent?.id);
+  const {
+    data: challengesFeed,
+    loading: challengesFeedLoading,
+    error: challengesFeedError,
+  } = useChallengesFeed(50);
 
-  const thisEventRows = useMemo(
-    () => mapEventRows(eventLeaderboardRows),
-    [eventLeaderboardRows]
-  );
+  const fallbackChallenge = useMemo(() => {
+    if (!activeEvent) {
+      return null;
+    }
 
-  const allTimeRows = useMemo(() => buildAllTimeRows(), []);
+    return challengesFeed
+      .filter((challenge) => challenge.eventId === activeEvent.id)
+      .sort((left, right) => right.startTime.toMillis() - left.startTime.toMillis())[0] ?? null;
+  }, [activeEvent, challengesFeed]);
+
+  const eventChallenge = activeChallenge ?? fallbackChallenge;
+
+  const {
+    data: eventLeaderboardRows,
+    loading: eventLeaderboardLoading,
+    error: eventLeaderboardError,
+  } = useLeaderboard(eventChallenge?.id);
+
+  const {
+    data: allTimeTeams = [],
+    isLoading: allTimeLoading,
+    error: allTimeError,
+  } = useQuery({
+    queryKey: ["all-time-teams"],
+    queryFn: async () => {
+      const snapshot = await getDocs(
+        query(teamsCollection, orderBy("totalChallengesWon", "desc"))
+      );
+      return snapshot.docs.map((docSnapshot) => docSnapshot.data());
+    },
+  });
+
+  const thisEventRows = useMemo(() => mapEventRows(eventLeaderboardRows), [eventLeaderboardRows]);
+  const allTimeRows = useMemo(() => mapAllTimeRows(allTimeTeams), [allTimeTeams]);
 
   const yourTeamId = firestoreUser?.teamId ?? null;
 
@@ -370,13 +330,31 @@ function LeaderboardContent() {
         <TabsContent value="event" className="outline-none">
           <LeaderboardPanel
             rows={thisEventRows}
-            loading={eventLoading || challengeLoading}
+            loading={
+              activeEventLoading ||
+              activeChallengeLoading ||
+              challengesFeedLoading ||
+              (Boolean(eventChallenge?.id) && eventLeaderboardLoading)
+            }
+            error={
+              activeEventError ??
+              activeChallengeError ??
+              challengesFeedError ??
+              eventLeaderboardError
+            }
             yourTeamId={yourTeamId}
+            emptyMessage="No challenge data yet for this event"
           />
         </TabsContent>
 
         <TabsContent value="all-time" className="outline-none">
-          <LeaderboardPanel rows={allTimeRows} loading={false} yourTeamId={yourTeamId} />
+          <LeaderboardPanel
+            rows={allTimeRows}
+            loading={allTimeLoading}
+            error={allTimeError instanceof Error ? allTimeError.message : null}
+            yourTeamId={yourTeamId}
+            emptyMessage="No all-time team data yet"
+          />
         </TabsContent>
       </Tabs>
     </section>

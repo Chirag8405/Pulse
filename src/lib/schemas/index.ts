@@ -30,15 +30,20 @@ export const UserProfileUpdateSchema = z.object({
 });
 
 export const AdminChallengeSchema = z.object({
-  title: z.string().min(5, "Title must be at least 5 characters").max(80, "Title must be at most 80 characters"),
+  title: z
+    .string()
+    .trim()
+    .min(1, "Title is required")
+    .max(80, "Maximum 80 characters"),
   description: z
     .string()
-    .min(10, "Description must be at least 10 characters")
-    .max(200, "Description must be at most 200 characters"),
+    .trim()
+    .min(1, "Description is required")
+    .max(200, "Maximum 200 characters"),
   targetSpreadPercentage: z
     .number()
-    .min(50, "Target spread percentage must be at least 50")
-    .max(90, "Target spread percentage must be at most 90"),
+    .min(50, "Must be between 50% and 90%")
+    .max(90, "Must be between 50% and 90%"),
   targetZoneCount: z
     .number()
     .int("Target zone count must be an integer")
@@ -47,7 +52,7 @@ export const AdminChallengeSchema = z.object({
   durationMinutes: z
     .number()
     .refine((value) => [8, 10, 12, 15].includes(value), {
-      message: "Duration must be one of: 8, 10, 12, 15 minutes",
+      message: "Select a valid duration",
     }),
   rewardType: z.enum([
     "Early Entry",
@@ -58,6 +63,7 @@ export const AdminChallengeSchema = z.object({
   ]),
   rewardDescription: z
     .string()
-    .min(5, "Reward description must be at least 5 characters")
-    .max(150, "Reward description must be at most 150 characters"),
+    .trim()
+    .min(1, "Reward description is required")
+    .max(150, "Maximum 150 characters"),
 });

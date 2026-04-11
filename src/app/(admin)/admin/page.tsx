@@ -12,6 +12,7 @@ import { useActiveEvent } from "@/hooks/useActiveEvent";
 import {
   useChallengesFeed,
   useEventsFeed,
+  useTeamsByEvent,
   useZoneOccupancy,
 } from "@/hooks/useAdminRealtime";
 import type { Event } from "@/types/firebase";
@@ -41,6 +42,11 @@ function getEventAttendeeCount(event: Event): number {
   return withCount.attendeeCount ?? withCount.totalAttendees ?? 0;
 }
 
+function getStartOfTodayMillis(): number {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+}
+
 function AdminOverviewContent() {
   const { data: events, loading: eventsLoading, error: eventsError } = useEventsFeed(60);
   const {
@@ -54,21 +60,37 @@ function AdminOverviewContent() {
     error: occupancyError,
   } = useZoneOccupancy();
 
-  const { data: activeEvent, error: activeEventError } = useActiveEvent();
+  const {
+    data: activeEvent,
+    loading: activeEventLoading,
+    error: activeEventError,
+  } = useActiveEvent();
   const {
     data: activeChallenge,
+    loading: activeChallengeLoading,
     error: activeChallengeError,
   } = useActiveChallenge(activeEvent?.id ?? null);
+  const {
+    data: activeEventTeams,
+    loading: teamsLoading,
+    error: teamsError,
+  } = useTeamsByEvent(activeEvent?.id ?? null);
 
-  const totalAttendeesFromEvents = events.reduce(
-    (sum, event) => sum + getEventAttendeeCount(event),
+  const totalAttendeesFromTeams = activeEventTeams.reduce(
+    (sum, team) => sum + team.memberIds.length,
     0
   );
 
+  const totalAttendeesFromEvents = activeEvent
+    ? getEventAttendeeCount(activeEvent)
+    : events.reduce((sum, event) => sum + getEventAttendeeCount(event), 0);
+
   const totalAttendees =
-    totalAttendeesFromEvents > 0
-      ? totalAttendeesFromEvents
-      : occupancy.totalActiveMembers;
+    totalAttendeesFromTeams > 0
+      ? totalAttendeesFromTeams
+      : totalAttendeesFromEvents > 0
+        ? totalAttendeesFromEvents
+        : occupancy.totalActiveMembers;
 
   const activeInChallenge = activeChallenge?.participatingTeamIds.length ?? 0;
 
@@ -78,17 +100,29 @@ function AdminOverviewContent() {
   })).sort((left, right) => right.count - left.count)[0];
 
   const completedChallengesToday = challenges.filter(
-    (challenge) => challenge.status === "completed" && isToday(challenge.endTime.toMillis())
+    (challenge) =>
+      challenge.status === "completed" &&
+      (!activeEvent || challenge.eventId === activeEvent.id) &&
+      challenge.startTime.toMillis() >= getStartOfTodayMillis() &&
+      isToday(challenge.endTime.toMillis())
   ).length;
 
   const combinedError =
     eventsError ??
+    teamsError ??
     challengesError ??
     occupancyError ??
     activeEventError ??
     activeChallengeError;
 
-  if (eventsLoading || challengesLoading || occupancyLoading) {
+  if (
+    eventsLoading ||
+    challengesLoading ||
+    occupancyLoading ||
+    activeEventLoading ||
+    activeChallengeLoading ||
+    teamsLoading
+  ) {
     return <LoadingSkeleton variant="admin" />;
   }
 
@@ -115,7 +149,7 @@ function AdminOverviewContent() {
           description="Participating teams in current challenge"
         />
         <StatCard
-          label="Current Active Zone"
+          label="Most Occupied Zone"
           value={mostOccupiedZone?.zone.name ?? "No occupancy"}
           icon={MapPinned}
           description="Most occupied zone right now"

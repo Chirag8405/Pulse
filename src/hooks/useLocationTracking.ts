@@ -30,7 +30,7 @@ interface UseLocationTrackingResult {
   setManualPickerOpen: (open: boolean) => void;
 }
 
-const LOCATION_MODE_KEY = "pulse.location.mode";
+const LOCATION_MODE_KEY = "pulse_location_permission";
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) {

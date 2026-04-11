@@ -14,6 +14,14 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == uid;
     }
 
+    function canSelfJoinTeam() {
+      return isAuthenticated() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds']) &&
+        request.resource.data.memberIds.hasAll(resource.data.memberIds) &&
+        request.resource.data.memberIds.hasAny([request.auth.uid]) &&
+        request.resource.data.memberIds.size() == resource.data.memberIds.size() + 1;
+    }
+
     function validLocation() {
       return request.resource.data.keys().hasAll([
           'userId',
@@ -46,7 +54,8 @@ service cloud.firestore {
 
     match /teams/{teamId} {
       allow read: if isAuthenticated();
-      allow write: if isAdmin();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || canSelfJoinTeam();
     }
 
     match /events/{eventId} {

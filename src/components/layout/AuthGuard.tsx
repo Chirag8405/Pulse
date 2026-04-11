@@ -17,7 +17,7 @@ export function AuthGuard({
 }: AuthGuardProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const { loading, isAuthenticated, isAdmin } = useAuth();
+  const { loading, isAuthReady, isAuthenticated, isAdmin } = useAuth();
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
@@ -26,8 +26,8 @@ export function AuthGuard({
     }
   }, [isAuthenticated, loading, pathname, router]);
 
-  if (loading) {
-    return <LoadingSkeleton variant="dashboard" />;
+  if (loading || !isAuthReady) {
+    return <LoadingSkeleton variant={requireAdmin ? "admin" : "dashboard"} />;
   }
 
   if (!isAuthenticated) {

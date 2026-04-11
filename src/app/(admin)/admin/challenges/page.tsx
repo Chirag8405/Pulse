@@ -1,15 +1,16 @@
 "use client";
 
+import { Fragment, type FormEvent, useMemo, useState } from "react";
 import {
-  Fragment,
-  type FormEvent,
-  type KeyboardEvent,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import { Timestamp, addDoc, doc, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
-import { AlertTriangle, Bot, RefreshCcw, Sparkles } from "lucide-react";
+  Timestamp,
+  addDoc,
+  collection,
+  doc,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+} from "firebase/firestore";
+import { Bot, RefreshCcw, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { AuthGuard } from "@/components/layout/AuthGuard";
 import { ActiveChallengeCard } from "@/components/attendee/ActiveChallengeCard";
@@ -61,11 +62,12 @@ import { logVenueAnalyticsEvent } from "@/lib/firebase/analytics";
 import {
   auditLogCollection,
   challengeDoc,
-  challengesCollection,
+  eventDoc,
 } from "@/lib/firebase/collections";
+import { db } from "@/lib/firebase/config";
 import { recommendChallengeParams } from "@/lib/recommender/challengeRecommender";
 import { AdminChallengeSchema } from "@/lib/schemas";
-import type { Challenge, ChallengeTeamProgress } from "@/types/firebase";
+import type { Challenge } from "@/types/firebase";
 
 interface ChallengeFormValues {
   title: string;
@@ -95,75 +97,80 @@ function getTeamName(teamId: string): string {
   return TEAM_MAPPINGS.find((team) => team.id === teamId)?.name ?? teamId;
 }
 
-function buildFormErrors(validationMessage: string, fieldPath: string): ChallengeFormErrors {
+function mapIssueToField(fieldPath: string): keyof ChallengeFormValues | null {
   if (
-    fieldPath !== "title" &&
-    fieldPath !== "description" &&
-    fieldPath !== "targetSpreadPercentage" &&
-    fieldPath !== "targetZoneCount" &&
-    fieldPath !== "durationMinutes" &&
-    fieldPath !== "rewardType" &&
-    fieldPath !== "rewardDescription"
+    fieldPath === "title" ||
+    fieldPath === "description" ||
+    fieldPath === "targetSpreadPercentage" ||
+    fieldPath === "targetZoneCount" ||
+    fieldPath === "durationMinutes" ||
+    fieldPath === "rewardType" ||
+    fieldPath === "rewardDescription"
   ) {
-    return {};
+    return fieldPath;
   }
 
-  return {
-    [fieldPath]: validationMessage,
-  };
+  return null;
 }
 
 function AdminChallengesContent() {
   const { firestoreUser } = useAuth();
 
-  const { data: activeEvent } = useActiveEvent();
+  const { data: activeEvent, loading: activeEventLoading } = useActiveEvent();
   const { data: activeChallenge, loading: activeChallengeLoading } = useActiveChallenge(
     activeEvent?.id ?? null
   );
-
   const { data: teams } = useTeamsByEvent(activeEvent?.id ?? null);
-  const { data: challengesFeed } = useChallengesFeed(200);
-  const { data: occupancy } = useZoneOccupancy();
+  const { data: challengesFeed, loading: challengesLoading, error: challengesError } =
+    useChallengesFeed(200);
+  const { data: occupancy, error: occupancyError } = useZoneOccupancy();
   const {
     data: leaderboardRows,
     loading: leaderboardLoading,
+    error: leaderboardError,
   } = useLeaderboard(activeChallenge?.id, 200);
 
   const [formValues, setFormValues] = useState<ChallengeFormValues>(INITIAL_FORM_VALUES);
   const [formErrors, setFormErrors] = useState<ChallengeFormErrors>({});
   const [recalcNonce, setRecalcNonce] = useState(0);
+  const [isRecalculating, setIsRecalculating] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSettingLiveId, setIsSettingLiveId] = useState<string | null>(null);
   const [isEndingChallenge, setIsEndingChallenge] = useState(false);
   const [confirmEndOpen, setConfirmEndOpen] = useState(false);
-  const [expandedTeamId, setExpandedTeamId] = useState<string | null>(null);
-  const progressRowRefs = useRef<Array<HTMLTableRowElement | null>>([]);
+
+  const eventChallenges = useMemo(() => {
+    if (!activeEvent) {
+      return [];
+    }
+
+    return challengesFeed.filter((challenge) => challenge.eventId === activeEvent.id);
+  }, [activeEvent, challengesFeed]);
+
+  const pendingChallenges = useMemo(() => {
+    return eventChallenges
+      .filter((challenge) => challenge.status === "pending")
+      .sort((left, right) => right.startTime.toMillis() - left.startTime.toMillis());
+  }, [eventChallenges]);
 
   const historicalSpreadScores = useMemo(() => {
-    return challengesFeed
-      .filter(
-        (challenge) =>
-          challenge.status === "completed" &&
-          (!activeEvent || challenge.eventId === activeEvent.id)
-      )
-      .slice(0, 10)
+    return eventChallenges
+      .filter((challenge) => challenge.status === "completed")
+      .sort((left, right) => right.startTime.toMillis() - left.startTime.toMillis())
+      .slice(0, 5)
       .map((challenge) => challenge.targetSpreadPercentage);
-  }, [activeEvent, challengesFeed]);
+  }, [eventChallenges]);
 
   const eventMinutesElapsed = useMemo(() => {
     if (!activeEvent) {
       return 0;
     }
 
-    const referenceMillis =
-      occupancy.updatedAtMillis > 0
-        ? occupancy.updatedAtMillis
-        : activeEvent.startTime.toMillis();
-
     return Math.max(
       0,
-      Math.floor((referenceMillis - activeEvent.startTime.toMillis()) / 60_000)
+      Math.floor((Date.now() - activeEvent.startTime.toDate().getTime()) / 60_000)
     );
-  }, [activeEvent, occupancy.updatedAtMillis]);
+  }, [activeEvent]);
 
   const recommendation = useMemo(() => {
     void recalcNonce;
@@ -193,36 +200,9 @@ function AdminChallengesContent() {
         description: formValues.rewardDescription || "Reward details will appear here",
         unlockedAt: null,
       },
-      participatingTeamIds: teams.map((team) => team.id),
+      participatingTeamIds: [],
     };
-  }, [activeEvent?.id, formValues, teams]);
-
-  const aggregateProgress = useMemo<ChallengeTeamProgress | null>(() => {
-    if (!activeChallenge) {
-      return null;
-    }
-
-    const averageSpread =
-      leaderboardRows.length > 0
-        ? leaderboardRows.reduce((sum, row) => sum + row.spreadScore, 0) /
-          leaderboardRows.length
-        : 0;
-
-    const memberCount = leaderboardRows.reduce(
-      (sum, row) => sum + row.memberCount,
-      0
-    );
-
-    return {
-      teamId: "aggregate",
-      challengeId: activeChallenge.id,
-      spreadScore: Math.round(averageSpread),
-      activeZones: [],
-      completedAt: null,
-      isCompleted: false,
-      memberCount,
-    };
-  }, [activeChallenge, leaderboardRows]);
+  }, [activeEvent?.id, formValues]);
 
   const suggestionZoneCards = recommendation.suggestedTargetZones.map((zoneId) => {
     const zone = ZONES.find((candidate) => candidate.id === zoneId);
@@ -234,15 +214,18 @@ function AdminChallengesContent() {
     };
   });
 
+  const handleRecalculate = () => {
+    setIsRecalculating(true);
+
+    window.setTimeout(() => {
+      setRecalcNonce((value) => value + 1);
+      setIsRecalculating(false);
+    }, 200);
+  };
+
   const handleUseRecommendedSettings = () => {
-    const recommendedZoneCount = Math.min(
-      6,
-      Math.max(2, recommendation.suggestedTargetZones.length)
-    );
-    const recommendedSpread = Math.min(
-      90,
-      Math.max(50, recommendation.suggestedSpreadPercentage)
-    );
+    const recommendedZoneCount = Math.min(6, Math.max(2, recommendation.suggestedTargetZones.length));
+    const recommendedSpread = Math.min(90, Math.max(50, recommendation.suggestedSpreadPercentage));
     const recommendedDuration = CHALLENGE_DURATION_OPTIONS.includes(
       recommendation.suggestedDuration as (typeof CHALLENGE_DURATION_OPTIONS)[number]
     )
@@ -264,10 +247,15 @@ function AdminChallengesContent() {
 
     if (!parsed.success) {
       const nextErrors = parsed.error.issues.reduce<ChallengeFormErrors>((acc, issue) => {
-        const fieldPath = String(issue.path[0] ?? "");
+        const fieldName = mapIssueToField(String(issue.path[0] ?? ""));
+
+        if (!fieldName || acc[fieldName]) {
+          return acc;
+        }
+
         return {
           ...acc,
-          ...buildFormErrors(issue.message, fieldPath),
+          [fieldName]: issue.message,
         };
       }, {});
 
@@ -284,14 +272,9 @@ function AdminChallengesContent() {
     setFormErrors({});
 
     try {
-      const startTime = Timestamp.now();
-      const endTime = Timestamp.fromMillis(
-        startTime.toMillis() + parsed.data.durationMinutes * 60_000
-      );
+      const challengeReference = doc(collection(db, "challenges"));
 
-      const challengeReference = doc(challengesCollection);
-
-      const challengePayload: Challenge = {
+      await setDoc(challengeReference, {
         id: challengeReference.id,
         eventId: activeEvent.id,
         title: parsed.data.title,
@@ -299,18 +282,19 @@ function AdminChallengesContent() {
         targetSpreadPercentage: parsed.data.targetSpreadPercentage,
         targetZoneCount: parsed.data.targetZoneCount,
         durationMinutes: parsed.data.durationMinutes,
-        startTime,
-        endTime,
-        status: "active",
+        startTime: serverTimestamp(),
+        endTime: Timestamp.fromMillis(
+          Date.now() + parsed.data.durationMinutes * 60_000
+        ),
+        status: "pending",
         reward: {
           type: parsed.data.rewardType,
           description: parsed.data.rewardDescription,
           unlockedAt: null,
         },
-        participatingTeamIds: teams.map((team) => team.id),
-      };
-
-      await setDoc(challengeReference, challengePayload);
+        participatingTeamIds: [],
+        createdBy: firestoreUser?.uid ?? null,
+      });
 
       await addDoc(auditLogCollection, {
         action: "challenge_created",
@@ -321,17 +305,45 @@ function AdminChallengesContent() {
 
       logVenueAnalyticsEvent("challenge_created", {
         challengeId: challengeReference.id,
-        eventId: activeEvent.id,
       });
 
-      toast.success("Challenge created successfully.");
+      toast.success("Challenge created. Set it live when ready.");
       setFormValues(INITIAL_FORM_VALUES);
-      setFormErrors({});
     } catch (createError) {
       const message = createError instanceof Error ? createError.message : "Challenge creation failed.";
       toast.error(message);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleSetLive = async (challenge: Challenge) => {
+    if (activeChallenge && activeChallenge.id !== challenge.id) {
+      toast.error("End the current active challenge first");
+      return;
+    }
+
+    setIsSettingLiveId(challenge.id);
+
+    try {
+      await updateDoc(challengeDoc(challenge.id), {
+        status: "active",
+        startTime: serverTimestamp(),
+        endTime: Timestamp.fromMillis(Date.now() + challenge.durationMinutes * 60_000),
+      });
+
+      if (activeEvent) {
+        await updateDoc(eventDoc(activeEvent.id), {
+          currentChallengeId: challenge.id,
+        });
+      }
+
+      toast.success("Challenge is now live.");
+    } catch (setLiveError) {
+      const message = setLiveError instanceof Error ? setLiveError.message : "Could not set challenge live.";
+      toast.error(message);
+    } finally {
+      setIsSettingLiveId(null);
     }
   };
 
@@ -350,7 +362,8 @@ function AdminChallengesContent() {
 
       logVenueAnalyticsEvent("challenge_completed", {
         challengeId: activeChallenge.id,
-        eventId: activeChallenge.eventId,
+        endedEarly: true,
+        adminUid: firestoreUser?.uid ?? "unknown",
       });
 
       toast.success("Challenge ended early.");
@@ -363,59 +376,44 @@ function AdminChallengesContent() {
     }
   };
 
-  const focusProgressRow = (index: number) => {
-    const target = progressRowRefs.current[index];
+  const combinedError = challengesError ?? occupancyError ?? leaderboardError;
 
-    if (target) {
-      target.focus();
-    }
-  };
+  if (activeEventLoading || challengesLoading) {
+    return <EmptyState icon={Bot} title="Loading challenge operations" description="Fetching event and challenge state..." />;
+  }
 
-  const handleProgressRowKeyDown = (index: number, teamId: string) => {
-    return (event: KeyboardEvent<HTMLTableRowElement>) => {
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        focusProgressRow(Math.min(leaderboardRows.length - 1, index + 1));
-        return;
-      }
-
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        focusProgressRow(Math.max(0, index - 1));
-        return;
-      }
-
-      if (event.key === "Enter") {
-        event.preventDefault();
-        setExpandedTeamId((currentTeamId) =>
-          currentTeamId === teamId ? null : teamId
-        );
-      }
-    };
-  };
+  if (!activeEvent) {
+    return (
+      <EmptyState
+        icon={Bot}
+        title="No active event"
+        description="Start an event before creating or activating challenges."
+      />
+    );
+  }
 
   return (
     <section className="space-y-4">
       <header>
         <h1 className="text-3xl font-black tracking-tight">Challenge Operations</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Configure challenges, launch recommendations, and monitor completion live.
+          Configure, stage, and activate challenges in realtime.
         </p>
       </header>
 
       <section className="nb-card border-l-4 border-l-amber-500 bg-card p-5">
         <div className="mb-3 flex items-center gap-2">
           <Bot className="size-5" />
-          <h2 className="text-xl font-black tracking-tight">Smart Challenge Recommender</h2>
+          <h2 className="text-xl font-black tracking-tight">🤖 Smart Challenge Recommender</h2>
         </div>
         <p className="text-sm text-muted-foreground">
-          Based on current crowd data and event context, here is what we recommend:
+          Based on current crowd distribution and event timing.
         </p>
 
         <div className="mt-4 grid gap-3 lg:grid-cols-2">
           <div className="nb-card bg-card p-3">
             <p className="font-mono text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
-              Suggested target zones
+              Suggested zones to target
             </p>
             <div className="mt-2 grid gap-2 sm:grid-cols-2">
               {suggestionZoneCards.map((zone) => (
@@ -430,7 +428,7 @@ function AdminChallengesContent() {
           <div className="grid gap-3 sm:grid-cols-2">
             <article className="nb-card bg-card p-3">
               <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-                Suggested spread %
+                Recommended spread target
               </p>
               <p className="mt-2 font-mono text-4xl font-black">
                 {recommendation.suggestedSpreadPercentage}%
@@ -438,10 +436,10 @@ function AdminChallengesContent() {
             </article>
             <article className="nb-card bg-card p-3">
               <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-                Suggested duration
+                Recommended duration
               </p>
               <p className="mt-2 font-mono text-4xl font-black">
-                {recommendation.suggestedDuration}m
+                {recommendation.suggestedDuration} min
               </p>
             </article>
           </div>
@@ -463,18 +461,23 @@ function AdminChallengesContent() {
           <Button
             type="button"
             variant="outline"
-            onClick={() => setRecalcNonce((value) => value + 1)}
+            onClick={handleRecalculate}
             className="nb-btn rounded-none border-2 border-border bg-card font-bold"
           >
             <RefreshCcw className="size-4" />
             Recalculate
           </Button>
+          {isRecalculating ? (
+            <span className="inline-flex items-center font-mono text-xs text-muted-foreground">
+              Recalculating...
+            </span>
+          ) : null}
         </div>
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[3fr_2fr]">
         <form className="nb-card bg-card p-5" onSubmit={handleCreateChallenge}>
-          <h2 className="text-xl font-black tracking-tight">CREATE NEW CHALLENGE</h2>
+          <h2 className="text-xl font-black tracking-tight">Create Challenge</h2>
 
           <div className="mt-4 space-y-4">
             <div>
@@ -484,24 +487,18 @@ function AdminChallengesContent() {
               <Input
                 id="challenge-title"
                 value={formValues.title}
-                aria-invalid={Boolean(formErrors.title)}
-                aria-describedby="challenge-title-error challenge-title-count"
                 maxLength={80}
-                onChange={(changeEvent) =>
+                onChange={(event) =>
                   setFormValues((currentValues) => ({
                     ...currentValues,
-                    title: changeEvent.target.value,
+                    title: event.target.value,
                   }))
                 }
                 className="rounded-none border-2 border-border"
               />
-              <div className="mt-1 flex items-center justify-between font-mono text-xs">
-                <span id="challenge-title-error" className="text-destructive" aria-live="assertive">
-                  {formErrors.title}
-                </span>
-                <span id="challenge-title-count" className="text-muted-foreground">
-                  {formValues.title.length}/80
-                </span>
+              <div className="mt-1 flex items-center justify-between text-xs">
+                <span className="font-mono text-destructive">{formErrors.title}</span>
+                <span className="font-mono text-muted-foreground">{formValues.title.length}/80</span>
               </div>
             </div>
 
@@ -512,28 +509,18 @@ function AdminChallengesContent() {
               <Textarea
                 id="challenge-description"
                 value={formValues.description}
-                aria-invalid={Boolean(formErrors.description)}
-                aria-describedby="challenge-description-error challenge-description-count"
                 maxLength={200}
-                onChange={(changeEvent) =>
+                onChange={(event) =>
                   setFormValues((currentValues) => ({
                     ...currentValues,
-                    description: changeEvent.target.value,
+                    description: event.target.value,
                   }))
                 }
                 className="min-h-24 rounded-none border-2 border-border"
               />
-              <div className="mt-1 flex items-center justify-between font-mono text-xs">
-                <span
-                  id="challenge-description-error"
-                  className="text-destructive"
-                  aria-live="assertive"
-                >
-                  {formErrors.description}
-                </span>
-                <span id="challenge-description-count" className="text-muted-foreground">
-                  {formValues.description.length}/200
-                </span>
+              <div className="mt-1 flex items-center justify-between text-xs">
+                <span className="font-mono text-destructive">{formErrors.description}</span>
+                <span className="font-mono text-muted-foreground">{formValues.description.length}/200</span>
               </div>
             </div>
 
@@ -547,8 +534,6 @@ function AdminChallengesContent() {
                   min={50}
                   max={90}
                   step={1}
-                  aria-describedby="challenge-target-spread-error"
-                  aria-invalid={Boolean(formErrors.targetSpreadPercentage)}
                   value={[formValues.targetSpreadPercentage]}
                   onValueChange={(values) => {
                     const nextValue = Array.isArray(values) ? values[0] : values;
@@ -565,23 +550,12 @@ function AdminChallengesContent() {
                 />
                 <span className="font-mono text-lg font-black">{formValues.targetSpreadPercentage}%</span>
               </div>
-              <p
-                id="challenge-target-spread-error"
-                className="mt-1 font-mono text-xs text-destructive"
-                aria-live="assertive"
-              >
-                {formErrors.targetSpreadPercentage}
-              </p>
+              <p className="mt-1 font-mono text-xs text-destructive">{formErrors.targetSpreadPercentage}</p>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label
-                  className="mb-1 block text-sm font-bold"
-                  htmlFor="challenge-target-zone-count"
-                >
-                  Target Zone Count
-                </label>
+                <label className="mb-1 block text-sm font-bold">Target Zone Count</label>
                 <Select
                   value={String(formValues.targetZoneCount)}
                   onValueChange={(value) =>
@@ -591,12 +565,7 @@ function AdminChallengesContent() {
                     }))
                   }
                 >
-                  <SelectTrigger
-                    id="challenge-target-zone-count"
-                    className="w-full rounded-none border-2 border-border"
-                    aria-describedby="challenge-target-zone-count-error"
-                    aria-invalid={Boolean(formErrors.targetZoneCount)}
-                  >
+                  <SelectTrigger className="w-full rounded-none border-2 border-border">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="rounded-none border-2 border-border">
@@ -607,19 +576,11 @@ function AdminChallengesContent() {
                     ))}
                   </SelectContent>
                 </Select>
-                <p
-                  id="challenge-target-zone-count-error"
-                  className="mt-1 font-mono text-xs text-destructive"
-                  aria-live="assertive"
-                >
-                  {formErrors.targetZoneCount}
-                </p>
+                <p className="mt-1 font-mono text-xs text-destructive">{formErrors.targetZoneCount}</p>
               </div>
 
               <div>
-                <label className="mb-1 block text-sm font-bold" htmlFor="challenge-duration">
-                  Duration
-                </label>
+                <label className="mb-1 block text-sm font-bold">Duration</label>
                 <Select
                   value={String(formValues.durationMinutes)}
                   onValueChange={(value) =>
@@ -629,12 +590,7 @@ function AdminChallengesContent() {
                     }))
                   }
                 >
-                  <SelectTrigger
-                    id="challenge-duration"
-                    className="w-full rounded-none border-2 border-border"
-                    aria-describedby="challenge-duration-error"
-                    aria-invalid={Boolean(formErrors.durationMinutes)}
-                  >
+                  <SelectTrigger className="w-full rounded-none border-2 border-border">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="rounded-none border-2 border-border">
@@ -645,21 +601,13 @@ function AdminChallengesContent() {
                     ))}
                   </SelectContent>
                 </Select>
-                <p
-                  id="challenge-duration-error"
-                  className="mt-1 font-mono text-xs text-destructive"
-                  aria-live="assertive"
-                >
-                  {formErrors.durationMinutes}
-                </p>
+                <p className="mt-1 font-mono text-xs text-destructive">{formErrors.durationMinutes}</p>
               </div>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label className="mb-1 block text-sm font-bold" htmlFor="challenge-reward-type">
-                  Reward Type
-                </label>
+                <label className="mb-1 block text-sm font-bold">Reward Type</label>
                 <Select
                   value={formValues.rewardType}
                   onValueChange={(value) =>
@@ -669,12 +617,7 @@ function AdminChallengesContent() {
                     }))
                   }
                 >
-                  <SelectTrigger
-                    id="challenge-reward-type"
-                    className="w-full rounded-none border-2 border-border"
-                    aria-describedby="challenge-reward-type-error"
-                    aria-invalid={Boolean(formErrors.rewardType)}
-                  >
+                  <SelectTrigger className="w-full rounded-none border-2 border-border">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="rounded-none border-2 border-border">
@@ -685,13 +628,7 @@ function AdminChallengesContent() {
                     ))}
                   </SelectContent>
                 </Select>
-                <p
-                  id="challenge-reward-type-error"
-                  className="mt-1 font-mono text-xs text-destructive"
-                  aria-live="assertive"
-                >
-                  {formErrors.rewardType}
-                </p>
+                <p className="mt-1 font-mono text-xs text-destructive">{formErrors.rewardType}</p>
               </div>
 
               <div>
@@ -701,23 +638,16 @@ function AdminChallengesContent() {
                 <Input
                   id="reward-description"
                   value={formValues.rewardDescription}
-                  aria-invalid={Boolean(formErrors.rewardDescription)}
-                  aria-describedby="reward-description-error"
-                  onChange={(changeEvent) =>
+                  maxLength={150}
+                  onChange={(event) =>
                     setFormValues((currentValues) => ({
                       ...currentValues,
-                      rewardDescription: changeEvent.target.value,
+                      rewardDescription: event.target.value,
                     }))
                   }
                   className="rounded-none border-2 border-border"
                 />
-                <p
-                  id="reward-description-error"
-                  className="mt-1 font-mono text-xs text-destructive"
-                  aria-live="assertive"
-                >
-                  {formErrors.rewardDescription}
-                </p>
+                <p className="mt-1 font-mono text-xs text-destructive">{formErrors.rewardDescription}</p>
               </div>
             </div>
 
@@ -745,20 +675,53 @@ function AdminChallengesContent() {
         </section>
       </section>
 
+      <section className="nb-card bg-card p-4">
+        <h2 className="text-xl font-black tracking-tight">Pending Challenges</h2>
+
+        {pendingChallenges.length === 0 ? (
+          <p className="mt-2 text-sm text-muted-foreground">No pending challenges.</p>
+        ) : (
+          <div className="mt-3 space-y-2">
+            {pendingChallenges.map((challenge) => (
+              <article key={challenge.id} className="border-2 border-border bg-card p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="font-bold">{challenge.title}</p>
+                    <p className="font-mono text-xs text-muted-foreground">
+                      {challenge.targetSpreadPercentage}% target • {challenge.durationMinutes} min
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      void handleSetLive(challenge);
+                    }}
+                    disabled={Boolean(isSettingLiveId)}
+                    className="nb-btn rounded-none border-2 border-border bg-primary font-bold text-primary-foreground"
+                  >
+                    {isSettingLiveId === challenge.id ? "Setting..." : "Set Live"}
+                  </Button>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+
       <section className="space-y-3">
         <h2 className="text-xl font-black tracking-tight">Active Challenge</h2>
 
         {!activeChallenge || activeChallengeLoading ? (
           <EmptyState
-            icon={AlertTriangle}
+            icon={Bot}
             title="No active challenge"
-            description="Launch a challenge from the form above to start live tracking."
+            description="Set a pending challenge live to start realtime team tracking."
           />
         ) : (
           <>
             <ActiveChallengeCard
               challenge={activeChallenge}
-              teamProgress={aggregateProgress}
+              teamProgress={null}
               statusLine={`${activeChallenge.participatingTeamIds.length} teams participating`}
             />
 
@@ -777,55 +740,37 @@ function AdminChallengesContent() {
                   <TableRow>
                     <TableHead>Team</TableHead>
                     <TableHead>Spread Score</TableHead>
+                    <TableHead>Zones Active</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Members</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {leaderboardRows.map((row, index) => {
-                    const rowKey = `${row.teamId}-${row.challengeId}`;
-                    const isExpanded = expandedTeamId === row.teamId;
+                  {leaderboardRows
+                    .toSorted((left, right) => right.spreadScore - left.spreadScore)
+                    .map((row) => {
+                      const rowKey = `${row.teamId}-${row.challengeId}`;
 
-                    return (
-                      <Fragment key={rowKey}>
-                        <TableRow
-                          tabIndex={0}
-                          ref={(element) => {
-                            progressRowRefs.current[index] = element;
-                          }}
-                          onKeyDown={handleProgressRowKeyDown(index, row.teamId)}
-                          aria-expanded={isExpanded}
-                        >
-                          <TableCell className="font-bold">{getTeamName(row.teamId)}</TableCell>
-                          <TableCell className="font-mono">{Math.round(row.spreadScore)}%</TableCell>
-                          <TableCell>
-                            <Badge
-                              className={
-                                row.isCompleted
-                                  ? "rounded-none border-2 border-border bg-emerald-500 px-2 py-1 text-xs font-bold text-white"
-                                  : "rounded-none border-2 border-border bg-amber-400 px-2 py-1 text-xs font-bold text-black"
-                              }
-                            >
-                              {row.isCompleted ? "Completed" : "In Progress"}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="font-mono">{row.memberCount}</TableCell>
-                        </TableRow>
-
-                        {isExpanded ? (
+                      return (
+                        <Fragment key={rowKey}>
                           <TableRow>
-                            <TableCell colSpan={4} className="bg-muted px-3 py-3 text-sm">
-                              <p className="font-bold">{getTeamName(row.teamId)} details</p>
-                              <p className="mt-1 font-mono text-xs text-muted-foreground">
-                                Spread score {Math.round(row.spreadScore)}%, {row.memberCount} active
-                                members, {row.activeZones.length} active zones.
-                              </p>
+                            <TableCell className="font-bold">{getTeamName(row.teamId)}</TableCell>
+                            <TableCell className="font-mono">{Math.round(row.spreadScore)}%</TableCell>
+                            <TableCell className="font-mono">{row.activeZones.length}</TableCell>
+                            <TableCell>
+                              <Badge
+                                className={
+                                  row.isCompleted
+                                    ? "rounded-none border-2 border-border bg-emerald-500 px-2 py-1 text-xs font-bold text-white"
+                                    : "rounded-none border-2 border-border bg-amber-400 px-2 py-1 text-xs font-bold text-black"
+                                }
+                              >
+                                {row.isCompleted ? "Completed" : "In Progress"}
+                              </Badge>
                             </TableCell>
                           </TableRow>
-                        ) : null}
-                      </Fragment>
-                    );
-                  })}
+                        </Fragment>
+                      );
+                    })}
                 </TableBody>
               </Table>
 
@@ -846,12 +791,28 @@ function AdminChallengesContent() {
         )}
       </section>
 
+      {combinedError ? (
+        <section className="nb-card border-destructive bg-card p-3">
+          <p className="font-mono text-xs text-destructive">{combinedError}</p>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => window.location.reload()}
+            className="nb-btn mt-3 rounded-none border-2 border-border bg-card font-bold"
+          >
+            Retry
+          </Button>
+        </section>
+      ) : null}
+
       <Dialog open={confirmEndOpen} onOpenChange={setConfirmEndOpen}>
         <DialogContent className="rounded-none border-2 border-border bg-card p-5" showCloseButton={false}>
           <DialogHeader>
-            <DialogTitle className="text-xl font-black tracking-tight">End challenge now?</DialogTitle>
+            <DialogTitle className="text-xl font-black tracking-tight">
+              End challenge for all teams? This cannot be undone.
+            </DialogTitle>
             <DialogDescription>
-              This action marks the challenge as completed for all participants.
+              The challenge will immediately stop for every attendee.
             </DialogDescription>
           </DialogHeader>
 
@@ -872,7 +833,7 @@ function AdminChallengesContent() {
               }}
               disabled={isEndingChallenge}
             >
-              {isEndingChallenge ? "Ending..." : "Confirm End"}
+              {isEndingChallenge ? "Ending..." : "End Challenge"}
             </Button>
           </div>
         </DialogContent>

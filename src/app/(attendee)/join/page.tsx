@@ -23,14 +23,6 @@ function estimateSectionCount(section: string, teamId: string): number {
   return 120 + ((sectionSeed + teamSeed) % 80);
 }
 
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return "Could not complete team assignment.";
-}
-
 interface PulseE2EWindow extends Window {
   __PULSE_E2E_AUTH__?: {
     uid: string;
@@ -48,7 +40,7 @@ function isMockE2EAuthSession(): boolean {
 
 export default function JoinPage() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { firestoreUser, isAdmin, loading, user } = useAuth();
 
   const step = useOnboardingStore((state) => state.step);
   const direction = useOnboardingStore((state) => state.direction);
@@ -80,7 +72,7 @@ export default function JoinPage() {
   }, [seatSection, selectedTeam]);
 
   useEffect(() => {
-    const normalized = seatInput.trim().toUpperCase();
+    const normalized = seatInput.trim();
 
     const timeoutId = window.setTimeout(() => {
       if (normalized.length === 0) {
@@ -109,7 +101,7 @@ export default function JoinPage() {
   const handleSeatContinue = useCallback(() => {
     setHasSubmittedSeatStep(true);
 
-    const normalized = seatInput.trim().toUpperCase();
+    const normalized = seatInput.trim();
     const validation = SeatInputSchema.safeParse(normalized);
 
     if (!validation.success) {
@@ -167,10 +159,27 @@ export default function JoinPage() {
       return;
     }
 
-    void joinTeam(userId, teamId).catch((error) => {
-      toast.error(getErrorMessage(error));
+    void joinTeam(userId, teamId).catch(() => {
+      toast.error("Could not join team. Please try again.");
     });
   }, [resetOnboarding, router, selectedTeam, user]);
+
+  useEffect(() => {
+    if (loading) {
+      return;
+    }
+
+    if (isAdmin) {
+      resetOnboarding();
+      router.replace("/admin");
+      return;
+    }
+
+    if (firestoreUser?.teamId) {
+      resetOnboarding();
+      router.replace("/dashboard");
+    }
+  }, [firestoreUser?.teamId, isAdmin, loading, resetOnboarding, router]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -262,9 +271,7 @@ export default function JoinPage() {
           <div
             key={`${step}-${direction}`}
             className={cn(
-              direction === "forward"
-                ? "nb-onboarding-slide-left"
-                : "nb-onboarding-slide-right"
+              direction === "forward" ? "slide-in-right" : "slide-in-left"
             )}
           >
             {step === 1 ? (
@@ -288,9 +295,7 @@ export default function JoinPage() {
                     value={seatInput}
                     onChange={(event) => {
                       setHasSubmittedSeatStep(false);
-                      setSeatInput(
-                        event.target.value.toUpperCase().replace(/\s+/g, "")
-                      );
+                      setSeatInput(event.target.value.replace(/\s+/g, ""));
                     }}
                     placeholder="A-12-34"
                     aria-label="Seat number"

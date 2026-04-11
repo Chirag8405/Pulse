@@ -13,6 +13,11 @@ import { APP_NAME, APP_TAGLINE } from "@/constants";
 
 type PendingMethod = "google" | "guest" | null;
 
+interface FirebaseAuthErrorLike {
+  code?: string;
+  message?: string;
+}
+
 function GoogleGIcon() {
   return (
     <svg aria-hidden="true" width="18" height="18" viewBox="0 0 18 18">
@@ -37,6 +42,12 @@ function GoogleGIcon() {
 }
 
 function getErrorMessage(error: unknown): string {
+  const authError = error as FirebaseAuthErrorLike;
+
+  if (authError.code === "auth/popup-blocked") {
+    return "Popup was blocked. Please allow popups for this site.";
+  }
+
   if (error instanceof Error) {
     return error.message;
   }
@@ -67,17 +78,25 @@ function LoginFallback() {
 function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { isAuthenticated, isAdmin, loading } = useAuth();
+  const { firestoreUser, isAuthenticated, isAdmin, loading } = useAuth();
   const [pendingMethod, setPendingMethod] = useState<PendingMethod>(null);
   const hasHandledPostLoginRedirect = useRef(false);
 
-  const redirectPath = useMemo(() => {
-    return searchParams.get("redirect") || "/dashboard";
+  const requestedRedirect = useMemo(() => {
+    return searchParams.get("redirect") || "";
   }, [searchParams]);
 
   const isAdminTarget = useMemo(() => {
-    return redirectPath === "/admin" || redirectPath.startsWith("/admin/");
-  }, [redirectPath]);
+    return requestedRedirect === "/admin" || requestedRedirect.startsWith("/admin/");
+  }, [requestedRedirect]);
+
+  const postLoginDestination = useMemo(() => {
+    if (isAdmin) {
+      return "/admin";
+    }
+
+    return firestoreUser?.teamId ? "/dashboard" : "/join";
+  }, [firestoreUser?.teamId, isAdmin]);
 
   useEffect(() => {
     if (loading || !isAuthenticated || hasHandledPostLoginRedirect.current) {
@@ -89,14 +108,12 @@ function LoginContent() {
     if (isAdminTarget && !isAdmin) {
       toast("Signed in as attendee", {
         description:
-          "Your account does not have venue staff access. Redirecting to attendee dashboard.",
+          "Your account does not have venue staff access. Redirecting to attendee flow.",
       });
-      router.push("/dashboard");
-      return;
     }
 
-    router.push(redirectPath);
-  }, [isAdmin, isAdminTarget, isAuthenticated, loading, redirectPath, router]);
+    router.replace(postLoginDestination);
+  }, [isAdmin, isAdminTarget, isAuthenticated, loading, postLoginDestination, router]);
 
   const handleGoogleSignIn = useCallback(async () => {
     setPendingMethod("google");
@@ -115,14 +132,12 @@ function LoginContent() {
 
     try {
       await signInAnonymously();
-      const guestDestination = isAdminTarget ? "/dashboard" : redirectPath;
-      router.push(guestDestination);
     } catch (error) {
       toast.error(getErrorMessage(error));
     } finally {
       setPendingMethod(null);
     }
-  }, [isAdminTarget, redirectPath, router]);
+  }, []);
 
   const isPending = pendingMethod !== null;
 

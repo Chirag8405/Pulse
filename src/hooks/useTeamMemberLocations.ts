@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { onSnapshot } from "firebase/firestore";
+import { onSnapshot, query, where } from "firebase/firestore";
 import { memberLocationsCollection } from "@/lib/firebase/collections";
 import type { MemberLocation } from "@/types/firebase";
 
@@ -50,8 +50,7 @@ export function useTeamMemberLocations(
         return;
       }
 
-      const locationDocs = incomingSnapshot.docs.map((docSnapshot) => docSnapshot.data());
-      const activeLocations = locationDocs.filter((location) => location.isActive);
+      const activeLocations = incomingSnapshot.docs.map((docSnapshot) => docSnapshot.data());
 
       const byZone = activeLocations.reduce<Record<string, number>>((acc, location) => {
         const currentCount = acc[location.zoneId] ?? 0;
@@ -93,7 +92,7 @@ export function useTeamMemberLocations(
     }
 
     const unsubscribe = onSnapshot(
-      memberLocationsCollection(teamId),
+      query(memberLocationsCollection(teamId), where("isActive", "==", true)),
       handleSnapshot,
       handleSnapshotError
     );

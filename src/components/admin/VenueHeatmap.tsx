@@ -493,12 +493,17 @@ export default function VenueHeatmap({ occupancyData }: VenueHeatmapProps) {
   };
 
   if (mapError) {
+    const description =
+      mapError === "missing-api-key"
+        ? "Google Maps API key not configured. Set NEXT_PUBLIC_GOOGLE_MAPS_API_KEY in .env.local"
+        : "Map could not be loaded. Check Google Maps API setup and network access.";
+
     return (
       <section className="nb-card bg-card p-4">
         <EmptyState
           icon={Map}
           title="Map unavailable"
-          description="Map unavailable. Check Google Maps API key configuration."
+          description={description}
         />
       </section>
     );

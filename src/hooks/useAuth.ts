@@ -11,6 +11,7 @@ interface UseAuthResult {
   user: FirebaseUser | null;
   firestoreUser: User | null;
   loading: boolean;
+  isAuthReady: boolean;
   error: string | null;
   isAdmin: boolean;
   isAuthenticated: boolean;
@@ -37,10 +38,12 @@ export function useAuth(): UseAuthResult {
   const user = useAuthStore((state) => state.user);
   const firestoreUser = useAuthStore((state) => state.firestoreUser);
   const loading = useAuthStore((state) => state.loading);
+  const isAuthReady = useAuthStore((state) => state.isAuthReady);
   const isAdmin = useAuthStore((state) => state.isAdmin);
   const setUser = useAuthStore((state) => state.setUser);
   const setFirestoreUser = useAuthStore((state) => state.setFirestoreUser);
   const setLoading = useAuthStore((state) => state.setLoading);
+  const setIsAuthReady = useAuthStore((state) => state.setIsAuthReady);
 
   const [error, setError] = useState<string | null>(null);
   const [e2eAuth, setE2EAuth] = useState<PulseE2EAuthPayload | null>(null);
@@ -49,15 +52,18 @@ export function useAuth(): UseAuthResult {
   const handleAuthChange = useCallback(
     async (firebaseUser: FirebaseUser | null) => {
       setError(null);
-      setUser(firebaseUser);
 
       if (!firebaseUser) {
+        setUser(null);
         setFirestoreUser(null);
         setLoading(false);
+        setIsAuthReady(true);
         return;
       }
 
+      setUser(firebaseUser);
       setLoading(true);
+      setIsAuthReady(false);
 
       try {
         const syncedUser = await getOrCreateUser(firebaseUser);
@@ -66,10 +72,11 @@ export function useAuth(): UseAuthResult {
         setFirestoreUser(null);
         setError(getErrorMessage(authError));
       } finally {
+        setIsAuthReady(true);
         setLoading(false);
       }
     },
-    [setFirestoreUser, setLoading, setUser]
+    [setFirestoreUser, setIsAuthReady, setLoading, setUser]
   );
 
   useEffect(() => {
@@ -91,6 +98,7 @@ export function useAuth(): UseAuthResult {
     }
 
     setLoading(true);
+    setIsAuthReady(false);
 
     const unsubscribe = onAuthChange((firebaseUser) => {
       void handleAuthChange(firebaseUser);
@@ -99,13 +107,14 @@ export function useAuth(): UseAuthResult {
     return () => {
       unsubscribe();
     };
-  }, [e2eAuth, handleAuthChange, hasResolvedE2EAuth, setLoading]);
+  }, [e2eAuth, handleAuthChange, hasResolvedE2EAuth, setIsAuthReady, setLoading]);
 
   if (!hasResolvedE2EAuth) {
     return {
       user: null,
       firestoreUser: null,
       loading: true,
+      isAuthReady: false,
       error: null,
       isAdmin: false,
       isAuthenticated: false,
@@ -117,6 +126,7 @@ export function useAuth(): UseAuthResult {
       user: { uid: e2eAuth.uid } as FirebaseUser,
       firestoreUser: null,
       loading: false,
+      isAuthReady: true,
       error: null,
       isAdmin: e2eAuth.isAdmin ?? false,
       isAuthenticated: true,
@@ -126,7 +136,8 @@ export function useAuth(): UseAuthResult {
   return {
     user,
     firestoreUser,
-    loading,
+    loading: loading || !isAuthReady,
+    isAuthReady,
     error,
     isAdmin,
     isAuthenticated: Boolean(user),

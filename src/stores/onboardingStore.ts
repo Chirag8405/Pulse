@@ -4,7 +4,7 @@ export type OnboardingStep = 1 | 2 | 3;
 
 interface OnboardingState {
   step: OnboardingStep;
-  direction: "forward" | "backward";
+  direction: "forward" | "back";
   seatInput: string;
   selectedTeamId: string | null;
   setSeatInput: (seatInput: string) => void;
@@ -33,7 +33,7 @@ export const useOnboardingStore = create<OnboardingState>((set) => ({
   goToPreviousStep: () =>
     set((state) => ({
       step: Math.max(1, state.step - 1) as OnboardingStep,
-      direction: "backward",
+      direction: "back",
     })),
   resetOnboarding: () => set(INITIAL_STATE),
 }));

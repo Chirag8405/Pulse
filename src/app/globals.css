@@ -172,6 +172,14 @@
   animation: nb-onboarding-slide-right 200ms ease;
 }
 
+.slide-in-right {
+  animation: slideInFromRight 200ms ease;
+}
+
+.slide-in-left {
+  animation: slideInFromLeft 200ms ease;
+}
+
 .nb-reveal-up {
   animation: nb-reveal-up 200ms ease;
 }
@@ -209,9 +217,33 @@
   }
 }
 
+@keyframes slideInFromRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideInFromLeft {
+  from {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .nb-onboarding-slide-left,
   .nb-onboarding-slide-right,
+  .slide-in-right,
+  .slide-in-left,
   .nb-reveal-up {
     animation: none;
   }

@@ -24,7 +24,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { TEAM_MAPPINGS } from "@/constants/teams";
 import { ZONES } from "@/constants";
-import { getBestMoveForAttendee, recommendChallengeParams } from "@/lib/recommender/challengeRecommender";
+import { recommendChallengeParams } from "@/lib/recommender/challengeRecommender";
 import { getTeamById } from "@/lib/firebase/helpers";
 import { useAuth } from "@/hooks/useAuth";
 import { useActiveEvent } from "@/hooks/useActiveEvent";
@@ -91,10 +91,11 @@ function DashboardContent() {
     loading: activeChallengeLoading,
     error: activeChallengeError,
   } = useActiveChallenge(activeEvent?.id ?? null);
-  const { data: teamProgress, error: teamProgressError } = useTeamProgress(
-    activeChallenge?.id,
-    teamId
-  );
+  const {
+    data: teamProgress,
+    loading: teamProgressLoading,
+    error: teamProgressError,
+  } = useTeamProgress(activeChallenge?.id, teamId);
   const { data: leaderboardRows, error: leaderboardError } = useLeaderboard(
     activeChallenge?.id
   );
@@ -187,26 +188,7 @@ function DashboardContent() {
     return ZONES.slice(0, activeChallenge.targetZoneCount).map((zone) => zone.id);
   }, [activeChallenge, recommendation]);
 
-  const currentZoneId =
-    locationTracking.data.currentZoneId ?? targetZoneIds[0] ?? ZONES[0].id;
-
-  const bestMove = useMemo(() => {
-    if (targetZoneIds.length === 0) {
-      return {
-        suggestedZoneId: currentZoneId,
-        reason: "You are in a great spot! Stay here.",
-      };
-    }
-
-    return getBestMoveForAttendee({
-      currentZoneId,
-      teamMemberLocations: occupancyByZone,
-      targetZoneIds,
-    });
-  }, [currentZoneId, occupancyByZone, targetZoneIds]);
-
-  const bestMoveZone =
-    ZONES.find((zone) => zone.id === bestMove.suggestedZoneId) ?? ZONES[0];
+  const currentZoneId = locationTracking.data.currentZoneId;
 
   const totalTeamMembers = Math.max(
     teamDoc?.memberIds.length ?? 0,
@@ -219,17 +201,22 @@ function DashboardContent() {
     teamProgress?.activeZones.length ??
     Object.values(occupancyByZone).filter((count) => count > 0).length;
 
-  const statusLine = `${teamMemberLocations.totalActiveMembers} of ${totalTeamMembers} teammates spread across ${zonesCovered} zones`;
+  const statusLine = teamId
+    ? `${teamMemberLocations.totalActiveMembers} of ${totalTeamMembers} teammates spread across ${zonesCovered} zones`
+    : "Join a team to start tracking your spread score";
 
   useEffect(() => {
     if (!activeChallenge || !teamId) {
       return;
     }
 
-    const completed = teamProgress?.isCompleted ?? false;
-    const isParticipating = activeChallenge.participatingTeamIds.includes(teamId);
+    if (activeChallenge.status !== "completed") {
+      return;
+    }
 
-    if (!completed || !isParticipating) {
+    const completed = teamProgress?.isCompleted ?? false;
+
+    if (!completed) {
       return;
     }
 
@@ -237,13 +224,11 @@ function DashboardContent() {
       return;
     }
 
-    const storageKey = `pulse.reward.seen.${activeChallenge.id}`;
+    const storageKey = `pulse_seen_reward_${activeChallenge.id}`;
 
     if (window.localStorage.getItem(storageKey)) {
       return;
     }
-
-    window.localStorage.setItem(storageKey, "1");
 
     const timeoutId = window.setTimeout(() => {
       setRewardOpen(true);
@@ -313,14 +298,15 @@ function DashboardContent() {
           <ActiveChallengeCard
             challenge={activeChallenge}
             teamProgress={teamProgress}
+            teamProgressLoading={teamProgressLoading}
+            hasTeam={Boolean(teamId)}
             statusLine={statusLine}
           />
 
           <BestMoveCard
-            reason={bestMove.reason}
-            isStayHere={bestMove.reason.includes("Stay here")}
-            suggestedZoneName={bestMoveZone.name}
-            suggestedZoneGate={bestMoveZone.gate}
+            currentZoneId={currentZoneId}
+            memberLocations={occupancyByZone}
+            targetZoneIds={targetZoneIds}
           />
 
           {locationTracking.data.mode === "manual" ? (

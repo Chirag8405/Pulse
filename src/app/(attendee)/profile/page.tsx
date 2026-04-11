@@ -41,7 +41,7 @@ import { useAuthStore } from "@/stores/authStore";
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 
-const LOCATION_PREF_KEY = "pulse.settings.shareLocation";
+const LOCATION_PREF_KEY = "pulse_location_permission";
 
 function formatMemberSinceLabel(epochMillis: number | null): string {
   if (!epochMillis) {
@@ -95,13 +95,7 @@ function ProfileContent() {
   const [displayNameDraft, setDisplayNameDraft] = useState<string | null>(null);
   const [nameValidationError, setNameValidationError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
-  const [shareLocation, setShareLocation] = useState<boolean>(() => {
-    if (typeof window === "undefined") {
-      return true;
-    }
-
-    return window.localStorage.getItem(LOCATION_PREF_KEY) !== "false";
-  });
+  const [shareLocation, setShareLocation] = useState(true);
   const [confirmSignOutOpen, setConfirmSignOutOpen] = useState(false);
   const [confirmDeleteAccountOpen, setConfirmDeleteAccountOpen] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
@@ -156,6 +150,14 @@ function ProfileContent() {
       eventsAttended: Math.max(0, Math.round(challengesCompleted / 3)),
     };
   }, [firestoreUser?.totalChallengesCompleted, firestoreUser?.totalPoints, teamDoc?.currentSpreadScore]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    setShareLocation(window.localStorage.getItem(LOCATION_PREF_KEY) !== "false");
+  }, []);
 
   useEffect(() => {
     if (!firestoreUser?.uid || displayNameDraft === null) {
@@ -318,7 +320,7 @@ function ProfileContent() {
               <EmptyState
                 icon={Star}
                 title="No rewards yet"
-                description="Complete challenge objectives to unlock rewards."
+                description="No rewards yet. Win a challenge!"
               />
             ) : (
               <div className="mt-3 space-y-2">

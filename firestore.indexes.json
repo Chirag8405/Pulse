@@ -25,6 +25,15 @@
         { "fieldPath": "spreadScore", "order": "DESCENDING" },
         { "fieldPath": "completedAt", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "memberLocations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "teamId", "order": "ASCENDING" },
+        { "fieldPath": "isActive", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

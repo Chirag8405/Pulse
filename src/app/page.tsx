@@ -1,7 +1,33 @@
+"use client";
+
+import { useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { APP_NAME } from "@/constants";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function HomePage() {
+  const router = useRouter();
+  const { firestoreUser, isAdmin, isAuthenticated, loading } = useAuth();
+
+  useEffect(() => {
+    if (loading || !isAuthenticated) {
+      return;
+    }
+
+    if (isAdmin) {
+      router.replace("/admin");
+      return;
+    }
+
+    if (firestoreUser?.teamId) {
+      router.replace("/dashboard");
+      return;
+    }
+
+    router.replace("/join");
+  }, [firestoreUser?.teamId, isAdmin, isAuthenticated, loading, router]);
+
   return (
     <main className="bg-background text-foreground">
       <section
@@ -24,13 +50,13 @@ export default function HomePage() {
 
           <div className="flex items-center justify-center gap-3">
             <Link
-              href="/dashboard"
+              href="/login"
               className="nb-btn inline-flex items-center justify-center border-2 border-border bg-primary px-6 py-3 font-bold text-primary-foreground"
             >
               Attend an Event
             </Link>
             <Link
-              href="/admin"
+              href="/login"
               className="nb-btn inline-flex items-center justify-center border-2 border-border bg-white px-6 py-3 font-bold text-black"
             >
               Venue Operations
