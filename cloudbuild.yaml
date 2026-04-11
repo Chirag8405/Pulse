@@ -14,6 +14,12 @@ steps:
       - |
         docker build \
           --build-arg NEXT_PUBLIC_FIREBASE_API_KEY=$$NEXT_PUBLIC_FIREBASE_API_KEY \
+          --build-arg NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=pulse-492918.firebaseapp.com \
+          --build-arg NEXT_PUBLIC_FIREBASE_PROJECT_ID=pulse-492918 \
+          --build-arg NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=pulse-492918.firebasestorage.app \
+          --build-arg NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=48556507973 \
+          --build-arg NEXT_PUBLIC_FIREBASE_APP_ID=1:48556507973:web:96e6aab3568822814a342c \
+          --build-arg NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=G-FCJ4P2E39X \
           -t gcr.io/$PROJECT_ID/pulse:$COMMIT_SHA \
           -t gcr.io/$PROJECT_ID/pulse:latest \
           .
@@ -37,7 +43,7 @@ steps:
       - --min-instances=0
       - --max-instances=10
       - --set-secrets=NEXT_PUBLIC_FIREBASE_API_KEY=firebase-api-key:latest
-      - --set-env-vars=NODE_ENV=production
+      - --set-env-vars=NODE_ENV=production,NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=pulse-492918.firebaseapp.com,NEXT_PUBLIC_FIREBASE_PROJECT_ID=pulse-492918,NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=pulse-492918.firebasestorage.app,NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=48556507973,NEXT_PUBLIC_FIREBASE_APP_ID=1:48556507973:web:96e6aab3568822814a342c,NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=G-FCJ4P2E39X
 
 images:
   - 'gcr.io/$PROJECT_ID/pulse:$COMMIT_SHA'
