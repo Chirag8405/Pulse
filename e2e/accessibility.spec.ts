@@ -18,7 +18,21 @@ async function seedAttendeeAuth(page: import("@playwright/test").Page) {
   await page.context().addCookies([
     {
       name: "__session",
-      value: "1",
+      value: "s.e2e",
+      url: "http://localhost:3000",
+    },
+  ]);
+}
+
+async function seedAdminAuth(page: import("@playwright/test").Page) {
+  await page.addInitScript(() => {
+    window.__PULSE_E2E_AUTH__ = { uid: "e2e-admin", isAdmin: true };
+  });
+
+  await page.context().addCookies([
+    {
+      name: "__session",
+      value: "s.e2e",
       url: "http://localhost:3000",
     },
   ]);
@@ -97,5 +111,51 @@ test("Leaderboard and join pages have no serious or critical axe violations", as
     );
 
     expect(blockingViolations).toEqual([]);
+  }
+});
+
+test("Skip-to-content link exists and targets #main-content", async ({ page }) => {
+  await page.goto("/");
+
+  const skipLink = page.locator('a[href="#main-content"]');
+  await expect(skipLink).toHaveCount(1);
+
+  const mainContent = page.locator("#main-content");
+  await expect(mainContent).toHaveCount(1);
+});
+
+test("Profile page has no serious or critical axe violations", async ({ page }) => {
+  await seedAttendeeAuth(page);
+  await page.goto("/profile");
+
+  const results = await new AxeBuilder({ page }).analyze();
+  const blockingViolations = results.violations.filter(
+    (violation) => violation.impact === "serious" || violation.impact === "critical"
+  );
+
+  expect(blockingViolations).toEqual([]);
+});
+
+test("Admin pages have no serious or critical axe violations", async ({ page }) => {
+  await seedAdminAuth(page);
+
+  for (const route of ["/admin/events", "/admin/challenges", "/admin/teams"]) {
+    await page.goto(route);
+
+    const results = await new AxeBuilder({ page }).analyze();
+    const blockingViolations = results.violations.filter(
+      (violation) => violation.impact === "serious" || violation.impact === "critical"
+    );
+
+    expect(blockingViolations).toEqual([]);
+  }
+});
+
+test("Every page has a main landmark", async ({ page }) => {
+  const pagesToCheck = ["/", "/login"];
+
+  for (const route of pagesToCheck) {
+    await page.goto(route);
+    await expect(page.locator("main")).toHaveCount(1);
   }
 });

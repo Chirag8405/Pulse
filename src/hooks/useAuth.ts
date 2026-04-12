@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { User as FirebaseUser } from "firebase/auth";
 import { onAuthChange } from "@/lib/firebase/auth";
 import { getOrCreateUser } from "@/lib/firebase/helpers";
@@ -49,6 +49,29 @@ export function useAuth(): UseAuthResult {
   const [e2eAuth, setE2EAuth] = useState<PulseE2EAuthPayload | null>(null);
   const [hasResolvedE2EAuth, setHasResolvedE2EAuth] = useState(false);
 
+  // Use refs for values that are used inside handleAuthChange's conditional
+  // check to prevent re-render loops from stale closure deps.
+  const userUidRef = useRef<string | null>(null);
+  const isAuthReadyRef = useRef(false);
+  const firestoreUserRef = useRef<User | null>(null);
+  const isAdminRef = useRef(false);
+
+  useEffect(() => {
+    userUidRef.current = user?.uid ?? null;
+  }, [user?.uid]);
+
+  useEffect(() => {
+    isAuthReadyRef.current = isAuthReady;
+  }, [isAuthReady]);
+
+  useEffect(() => {
+    firestoreUserRef.current = firestoreUser;
+  }, [firestoreUser]);
+
+  useEffect(() => {
+    isAdminRef.current = isAdmin;
+  }, [isAdmin]);
+
   const handleAuthChange = useCallback(
     async (firebaseUser: FirebaseUser | null) => {
       setError(null);
@@ -63,9 +86,9 @@ export function useAuth(): UseAuthResult {
 
       // Avoid re-running expensive user hydration when auth state is already settled.
       if (
-        user?.uid === firebaseUser.uid &&
-        isAuthReady &&
-        (firestoreUser !== null || isAdmin)
+        userUidRef.current === firebaseUser.uid &&
+        isAuthReadyRef.current &&
+        (firestoreUserRef.current !== null || isAdminRef.current)
       ) {
         setUser(firebaseUser);
         return;
@@ -86,16 +109,7 @@ export function useAuth(): UseAuthResult {
         setLoading(false);
       }
     },
-    [
-      firestoreUser,
-      isAdmin,
-      isAuthReady,
-      setFirestoreUser,
-      setIsAuthReady,
-      setLoading,
-      setUser,
-      user?.uid,
-    ]
+    [setFirestoreUser, setIsAuthReady, setLoading, setUser]
   );
 
   useEffect(() => {

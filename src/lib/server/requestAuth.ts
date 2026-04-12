@@ -2,6 +2,10 @@ import "server-only";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import {
+  getBearerToken,
+  isAdminLikeValue,
+} from "@/lib/shared/authUtils";
 
 interface VerifyRequestResult {
   ok: boolean;
@@ -17,21 +21,7 @@ interface AdminRoleLikeFields {
   "is admin"?: unknown;
 }
 
-export function getBearerToken(request: NextRequest): string | null {
-  const authorizationHeader = request.headers.get("authorization");
-
-  if (!authorizationHeader) {
-    return null;
-  }
-
-  const [scheme, token] = authorizationHeader.split(" ");
-
-  if (scheme?.toLowerCase() !== "bearer" || !token) {
-    return null;
-  }
-
-  return token;
-}
+export { getBearerToken } from "@/lib/shared/authUtils";
 
 export async function verifyBearerToken(
   request: NextRequest
@@ -64,30 +54,6 @@ export async function verifyBearerToken(
       ),
     };
   }
-}
-
-function isAdminLikeValue(value: unknown): boolean {
-  if (typeof value === "boolean") {
-    return value;
-  }
-
-  if (typeof value === "number") {
-    return value === 1;
-  }
-
-  if (typeof value === "string") {
-    const normalizedValue = value.trim().toLowerCase();
-
-    return (
-      normalizedValue === "admin" ||
-      normalizedValue === "staff" ||
-      normalizedValue === "true" ||
-      normalizedValue === "1" ||
-      normalizedValue === "yes"
-    );
-  }
-
-  return false;
 }
 
 export async function readIsAdmin(uid: string): Promise<boolean> {

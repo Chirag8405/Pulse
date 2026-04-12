@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { VENUE_NAME } from "@/constants";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { getBearerToken, isAdminLikeValue } from "@/lib/shared/authUtils";
 
 interface UserBootstrapDoc {
   uid: string;
@@ -37,48 +38,8 @@ const ADMIN_EMAILS = new Set(
 
 const AUTO_BOOTSTRAP_FIRST_ADMIN = process.env.AUTO_BOOTSTRAP_FIRST_ADMIN !== "false";
 
-function getBearerToken(request: NextRequest): string | null {
-  const authorizationHeader = request.headers.get("authorization");
-
-  if (!authorizationHeader) {
-    return null;
-  }
-
-  const [scheme, token] = authorizationHeader.split(" ");
-
-  if (scheme?.toLowerCase() !== "bearer" || !token) {
-    return null;
-  }
-
-  return token;
-}
-
 function getNumber(value: unknown, fallback = 0): number {
   return typeof value === "number" ? value : fallback;
-}
-
-function hasAdminRoleValue(value: unknown): boolean {
-  if (typeof value === "boolean") {
-    return value;
-  }
-
-  if (typeof value === "number") {
-    return value === 1;
-  }
-
-  if (typeof value === "string") {
-    const normalizedValue = value.trim().toLowerCase();
-
-    return (
-      normalizedValue === "admin" ||
-      normalizedValue === "staff" ||
-      normalizedValue === "true" ||
-      normalizedValue === "1" ||
-      normalizedValue === "yes"
-    );
-  }
-
-  return false;
 }
 
 function hasExistingAdminFlag(existingData: Partial<UserBootstrapDoc> | null): boolean {
@@ -86,26 +47,26 @@ function hasExistingAdminFlag(existingData: Partial<UserBootstrapDoc> | null): b
     return false;
   }
 
-  if (hasAdminRoleValue(existingData.isAdmin)) {
+  if (isAdminLikeValue(existingData.isAdmin)) {
     return true;
   }
 
   const legacyData = existingData as LegacyUserRoleDoc;
 
   return (
-    hasAdminRoleValue(legacyData.role) ||
-    hasAdminRoleValue(legacyData.admin) ||
-    hasAdminRoleValue(legacyData.is_admin) ||
-    hasAdminRoleValue(legacyData["is admin"])
+    isAdminLikeValue(legacyData.role) ||
+    isAdminLikeValue(legacyData.admin) ||
+    isAdminLikeValue(legacyData.is_admin) ||
+    isAdminLikeValue(legacyData["is admin"])
   );
 }
 
 function hasAdminClaim(decodedToken: AdminClaims): boolean {
-  if (hasAdminRoleValue(decodedToken.admin) || hasAdminRoleValue(decodedToken.isAdmin)) {
+  if (isAdminLikeValue(decodedToken.admin) || isAdminLikeValue(decodedToken.isAdmin)) {
     return true;
   }
 
-  return hasAdminRoleValue(decodedToken.role);
+  return isAdminLikeValue(decodedToken.role);
 }
 
 async function tryClaimFirstAdmin(uid: string): Promise<boolean> {

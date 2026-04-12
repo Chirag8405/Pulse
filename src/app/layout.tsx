@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import { AxeMonitor } from "@/components/shared/AxeMonitor";
 import { ReactQueryProvider } from "@/components/shared/ReactQueryProvider";
+import { SkipToContent } from "@/components/shared/SkipToContent";
 import { AuthBootstrap } from "@/components/layout/AuthBootstrap";
 import { APP_NAME, APP_TAGLINE } from "@/constants";
 import "./globals.css";
@@ -61,9 +62,12 @@ export default function RootLayout({
         >
           <ReactQueryProvider>
             <TooltipProvider>
+              <SkipToContent />
               <AuthBootstrap />
               {process.env.NODE_ENV === "development" ? <AxeMonitor /> : null}
-              {children}
+              <main id="main-content">
+                {children}
+              </main>
               <Toaster richColors closeButton />
             </TooltipProvider>
           </ReactQueryProvider>

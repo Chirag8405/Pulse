@@ -29,7 +29,10 @@ function setSessionCookie(): void {
       ? "; Secure"
       : "";
 
-  document.cookie = `${SESSION_COOKIE_NAME}=1; Path=/; Max-Age=86400; SameSite=Lax${secureAttribute}`;
+  // Use a timestamp-based value instead of a static flag to reduce forgery surface.
+  const cookieValue = `s.${Date.now().toString(36)}`;
+
+  document.cookie = `${SESSION_COOKIE_NAME}=${cookieValue}; Path=/; Max-Age=86400; SameSite=Lax${secureAttribute}`;
 }
 
 function clearSessionCookie(): void {

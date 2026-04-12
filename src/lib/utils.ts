@@ -34,21 +34,31 @@ export function haversineDistance(
   return earthRadiusMeters * c
 }
 
+/**
+ * Returns the nearest zone to the given coordinates using a single-pass
+ * O(n) minimum search instead of O(n log n) sort.
+ */
 export function getNearestZone(coords: Coordinates) {
-  const nearestZone = ZONES.toSorted((left, right) => {
-    const leftDistance = haversineDistance(coords, {
-      lat: left.lat,
-      lng: left.lng,
-    })
-    const rightDistance = haversineDistance(coords, {
-      lat: right.lat,
-      lng: right.lng,
+  let nearestZone: (typeof ZONES)[number] = ZONES[0]!
+  let minDistance = haversineDistance(coords, {
+    lat: nearestZone.lat,
+    lng: nearestZone.lng,
+  })
+
+  for (let i = 1; i < ZONES.length; i++) {
+    const zone = ZONES[i]!
+    const distance = haversineDistance(coords, {
+      lat: zone.lat,
+      lng: zone.lng,
     })
 
-    return leftDistance - rightDistance
-  })[0]
+    if (distance < minDistance) {
+      minDistance = distance
+      nearestZone = zone
+    }
+  }
 
-  return nearestZone ?? ZONES[0]
+  return nearestZone
 }
 
 export function formatCountdown(totalSeconds: number): string {

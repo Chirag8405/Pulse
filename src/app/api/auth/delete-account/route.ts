@@ -1,25 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { getBearerToken } from "@/lib/shared/authUtils";
 
 interface UserDeleteDoc {
   teamId?: unknown;
-}
-
-function getBearerToken(request: NextRequest): string | null {
-  const authorizationHeader = request.headers.get("authorization");
-
-  if (!authorizationHeader) {
-    return null;
-  }
-
-  const [scheme, token] = authorizationHeader.split(" ");
-
-  if (scheme?.toLowerCase() !== "bearer" || !token) {
-    return null;
-  }
-
-  return token;
 }
 
 function isFirebaseUserNotFoundError(error: unknown): boolean {

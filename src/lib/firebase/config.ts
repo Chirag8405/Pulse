@@ -10,21 +10,26 @@ import {
 } from "firebase/firestore";
 import { getAuth, type Auth } from "firebase/auth";
 
+function requireEnvVar(name: string): string {
+  const value = process.env[name];
+
+  if (!value) {
+    throw new Error(
+      `Missing required environment variable: ${name}. ` +
+      `Add it to .env.local (see .env.example for reference).`
+    );
+  }
+
+  return value;
+}
+
 const firebaseConfig = {
-  apiKey:
-    process.env.NEXT_PUBLIC_FIREBASE_API_KEY ||
-    "demo-firebase-api-key",
-  authDomain:
-    process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ||
-    "demo-pulse.firebaseapp.com",
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "demo-pulse",
-  storageBucket:
-    process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "demo-pulse.appspot.com",
-  messagingSenderId:
-    process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "1234567890",
-  appId:
-    process.env.NEXT_PUBLIC_FIREBASE_APP_ID ||
-    "1:1234567890:web:1234567890abcdef123456",
+  apiKey: requireEnvVar("NEXT_PUBLIC_FIREBASE_API_KEY"),
+  authDomain: requireEnvVar("NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN"),
+  projectId: requireEnvVar("NEXT_PUBLIC_FIREBASE_PROJECT_ID"),
+  storageBucket: requireEnvVar("NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET"),
+  messagingSenderId: requireEnvVar("NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID"),
+  appId: requireEnvVar("NEXT_PUBLIC_FIREBASE_APP_ID"),
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 

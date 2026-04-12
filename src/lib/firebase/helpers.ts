@@ -26,6 +26,7 @@ import {
 } from "@/lib/firebase/collections";
 import { db } from "@/lib/firebase/config";
 import { LocationUpdateSchema } from "@/lib/schemas";
+import { isAdminLikeValue } from "@/lib/shared/authUtils";
 import type {
   Challenge,
   ChallengeTeamProgress,
@@ -42,30 +43,6 @@ interface LegacyUserAdminFields {
   is_admin?: unknown;
   "is admin"?: unknown;
   isAdmin?: unknown;
-}
-
-function isAdminLikeValue(value: unknown): boolean {
-  if (value === true) {
-    return true;
-  }
-
-  if (typeof value === "number") {
-    return value === 1;
-  }
-
-  if (typeof value === "string") {
-    const normalizedValue = value.trim().toLowerCase();
-
-    return (
-      normalizedValue === "true" ||
-      normalizedValue === "1" ||
-      normalizedValue === "yes" ||
-      normalizedValue === "admin" ||
-      normalizedValue === "staff"
-    );
-  }
-
-  return false;
 }
 
 function normalizeUserAdminFlag(user: User): User {
@@ -143,6 +120,50 @@ async function bootstrapUserOnServer(
   return (await response.json().catch(() => null)) as BootstrapUserResponse | null;
 }
 
+/**
+ * Builds a fallback User object from Firebase Auth + bootstrap data
+ * without requiring a Firestore read.
+ */
+function buildFallbackUser(
+  firebaseUser: FirebaseUser,
+  isAdmin: boolean,
+  teamId: string | null
+): User {
+  return {
+    uid: firebaseUser.uid,
+    email: firebaseUser.email,
+    displayName: firebaseUser.displayName,
+    photoURL: firebaseUser.photoURL,
+    teamId,
+    venueId: VENUE_NAME,
+    joinedAt: Timestamp.now(),
+    totalPoints: 0,
+    totalChallengesCompleted: 0,
+    isAdmin,
+  };
+}
+
+/**
+ * Applies bootstrap-derived admin/teamId overrides on top of a User.
+ */
+function applyBootstrapOverrides(
+  user: User,
+  bootstrappedIsAdmin: boolean | null,
+  bootstrappedTeamId: string | null
+): User {
+  if (bootstrappedIsAdmin !== true && bootstrappedTeamId == null) {
+    return user;
+  }
+
+  return {
+    ...user,
+    isAdmin: bootstrappedIsAdmin === true ? true : user.isAdmin,
+    teamId:
+      user.teamId ??
+      (typeof bootstrappedTeamId === "string" ? bootstrappedTeamId : null),
+  };
+}
+
 export async function getOrCreateUser(firebaseUser: FirebaseUser): Promise<User> {
   const existingSync = userSyncInFlight.get(firebaseUser.uid);
 
@@ -151,90 +172,50 @@ export async function getOrCreateUser(firebaseUser: FirebaseUser): Promise<User>
   }
 
   const syncPromise = (async () => {
-    let hasBootstrapResult = false;
     let bootstrappedIsAdmin: boolean | null = null;
     let bootstrappedTeamId: string | null = null;
+    let hasBootstrapResult = false;
 
-    const applyBootstrapAdminFallback = (user: User): User => {
-      if (bootstrappedIsAdmin !== true && bootstrappedTeamId == null) {
-        return user;
-      }
-
-      return {
-        ...user,
-        isAdmin: bootstrappedIsAdmin === true ? true : user.isAdmin,
-        teamId:
-          user.teamId ??
-          (typeof bootstrappedTeamId === "string" ? bootstrappedTeamId : null),
-      };
-    };
-
+    // Phase 1: Try server bootstrap + fresh read
     try {
-      const bootstrapResult = await bootstrapUserOnServer(firebaseUser);
-      hasBootstrapResult = bootstrapResult !== null;
-      bootstrappedIsAdmin = bootstrapResult?.isAdmin === true;
+      const result = await bootstrapUserOnServer(firebaseUser);
+      hasBootstrapResult = result !== null;
+      bootstrappedIsAdmin = result?.isAdmin === true;
       bootstrappedTeamId =
-        typeof bootstrapResult?.teamId === "string" ? bootstrapResult.teamId : null;
+        typeof result?.teamId === "string" ? result.teamId : null;
 
       const syncedUser = await getUserById(firebaseUser.uid);
-
       if (syncedUser) {
-        return applyBootstrapAdminFallback(syncedUser);
+        return applyBootstrapOverrides(syncedUser, bootstrappedIsAdmin, bootstrappedTeamId);
       }
     } catch {
       // Fallback for local/offline development where API route may be unavailable.
     }
 
-    let existing: User | null = null;
-
-    try {
-      existing = await getUserById(firebaseUser.uid);
-    } catch {
-      existing = null;
-    }
-
+    // Phase 2: Direct Firestore read
+    const existing = await getUserById(firebaseUser.uid).catch(() => null);
     if (existing) {
-      return applyBootstrapAdminFallback(existing);
+      return applyBootstrapOverrides(existing, bootstrappedIsAdmin, bootstrappedTeamId);
     }
 
+    // Phase 3: Server bootstrap succeeded but Firestore reads failed — use derived data
     if (hasBootstrapResult) {
-      // Bootstrap succeeded on the server. If Firestore reads are unavailable on the client,
-      // avoid local writes that can fail due rules and hydrate from server-derived basics.
-      return {
-        uid: firebaseUser.uid,
-        email: firebaseUser.email,
-        displayName: firebaseUser.displayName,
-        photoURL: firebaseUser.photoURL,
-        teamId: bootstrappedTeamId,
-        venueId: VENUE_NAME,
-        joinedAt: Timestamp.now(),
-        totalPoints: 0,
-        totalChallengesCompleted: 0,
-        isAdmin: bootstrappedIsAdmin === true,
-      };
+      return buildFallbackUser(firebaseUser, bootstrappedIsAdmin === true, bootstrappedTeamId);
     }
 
-    const newUser: User = {
-      uid: firebaseUser.uid,
-      email: firebaseUser.email,
-      displayName: firebaseUser.displayName,
-      photoURL: firebaseUser.photoURL,
-      teamId: bootstrappedTeamId,
-      venueId: VENUE_NAME,
-      joinedAt: Timestamp.now(),
-      totalPoints: 0,
-      totalChallengesCompleted: 0,
-      isAdmin: bootstrappedIsAdmin === true,
-    };
+    // Phase 4: Create new user document
+    const newUser = buildFallbackUser(
+      firebaseUser,
+      bootstrappedIsAdmin === true,
+      bootstrappedTeamId
+    );
 
     try {
       await setDoc(userDoc(firebaseUser.uid), newUser, { merge: true });
     } catch (writeError) {
-      // If the user doc already exists with stricter fields (for example isAdmin),
-      // prefer reading canonical server state over failing auth hydration.
-      const hydratedUser = await getUserById(firebaseUser.uid);
+      const hydratedUser = await getUserById(firebaseUser.uid).catch(() => null);
       if (hydratedUser) {
-        return applyBootstrapAdminFallback(hydratedUser);
+        return applyBootstrapOverrides(hydratedUser, bootstrappedIsAdmin, bootstrappedTeamId);
       }
 
       if (process.env.NODE_ENV === "development") {
@@ -247,12 +228,11 @@ export async function getOrCreateUser(firebaseUser: FirebaseUser): Promise<User>
       return newUser;
     }
 
-    const hydratedUser = await getUserById(firebaseUser.uid);
-    if (hydratedUser) {
-      return applyBootstrapAdminFallback(hydratedUser);
-    }
-
-    return applyBootstrapAdminFallback(newUser);
+    return applyBootstrapOverrides(
+      (await getUserById(firebaseUser.uid)) ?? newUser,
+      bootstrappedIsAdmin,
+      bootstrappedTeamId
+    );
   })();
 
   userSyncInFlight.set(firebaseUser.uid, syncPromise);
