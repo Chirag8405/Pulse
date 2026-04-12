@@ -3,6 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { User as FirebaseUser } from "firebase/auth";
 import { onAuthChange } from "@/lib/firebase/auth";
+import {
+  setAnalyticsUserId,
+  setAnalyticsUserProperties,
+} from "@/lib/firebase/analytics";
 import { getOrCreateUser } from "@/lib/firebase/helpers";
 import { getErrorMessage } from "@/lib/shared/errorUtils";
 import { useAuthStore } from "@/stores/authStore";
@@ -75,6 +79,10 @@ export function useAuth(): UseAuthResult {
       if (!firebaseUser) {
         setUser(null);
         setFirestoreUser(null);
+        setAnalyticsUserProperties({
+          role: "signed_out",
+          teamId: null,
+        });
         setLoading(false);
         setIsAuthReady(true);
         return;
@@ -97,6 +105,11 @@ export function useAuth(): UseAuthResult {
       try {
         const syncedUser = await getOrCreateUser(firebaseUser);
         setFirestoreUser(syncedUser);
+        setAnalyticsUserId(firebaseUser.uid);
+        setAnalyticsUserProperties({
+          role: syncedUser.isAdmin ? "admin" : "attendee",
+          teamId: syncedUser.teamId,
+        });
       } catch (authError) {
         setFirestoreUser(null);
         setError(getAuthErrorMessage(authError));

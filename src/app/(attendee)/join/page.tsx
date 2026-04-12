@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { AuthGuard } from "@/components/layout/AuthGuard";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { logScreenView, logVenueAnalyticsEvent } from "@/lib/firebase/analytics";
 import { SeatInputSchema } from "@/lib/schemas";
 import { TEAM_MAPPINGS, getTeamForSeatSection } from "@/constants/teams";
 import { useAuth } from "@/hooks/useAuth";
@@ -104,6 +105,10 @@ export default function JoinPage() {
   }, [seatSection, selectedTeam]);
 
   useEffect(() => {
+    logScreenView("JoinTeam");
+  }, []);
+
+  useEffect(() => {
     const normalized = seatInput.trim();
 
     const timeoutId = window.setTimeout(() => {
@@ -190,6 +195,11 @@ export default function JoinPage() {
         await joinTeamOnServer(user, teamId);
       }
 
+      logVenueAnalyticsEvent("team_joined", {
+        teamId,
+        section: seatSection,
+      });
+
       resetOnboarding();
       router.push("/dashboard");
     } catch (error) {
@@ -201,7 +211,7 @@ export default function JoinPage() {
     } finally {
       setIsJoiningTeam(false);
     }
-  }, [resetOnboarding, router, selectedTeam, user]);
+  }, [resetOnboarding, router, seatSection, selectedTeam, user]);
 
   useEffect(() => {
     if (loading) {

@@ -38,6 +38,11 @@ vi.mock("@/lib/firebase/helpers", () => ({
   getOrCreateUser: vi.fn(),
 }));
 
+vi.mock("@/lib/firebase/analytics", () => ({
+  setAnalyticsUserId: vi.fn(),
+  setAnalyticsUserProperties: vi.fn(),
+}));
+
 vi.mock("@/stores/authStore", () => {
   const state = {
     user: null as import("firebase/auth").User | null,

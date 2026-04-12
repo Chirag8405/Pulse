@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { LOCATION_UPDATE_INTERVAL_MS, ZONES } from "@/constants";
 import { updateUserLocation } from "@/lib/firebase/helpers";
+import { logVenueAnalyticsEvent } from "@/lib/firebase/analytics";
 import { getErrorMessage } from "@/lib/shared/errorUtils";
 import { haversineDistance } from "@/lib/utils";
 
@@ -67,6 +68,7 @@ export function useLocationTracking({
 
   const watchIdRef = useRef<number | null>(null);
   const lastLocationPushAtRef = useRef(0);
+  const currentZoneIdRef = useRef<string | null>(null);
 
   const persistMode = useCallback((nextMode: LocationMode) => {
     if (typeof window === "undefined") {
@@ -98,13 +100,22 @@ export function useLocationTracking({
         setCurrentZoneId(zoneId);
 
         await updateUserLocation(userId, teamId, zoneId);
+
+        if (currentZoneIdRef.current !== zoneId) {
+          logVenueAnalyticsEvent("zone_changed", {
+            zoneId,
+            mode,
+          });
+        }
+
+        currentZoneIdRef.current = zoneId;
       } catch (locationError) {
         setError(getLocationErrorMessage(locationError));
       } finally {
         setLoading(false);
       }
     },
-    [teamId, userId]
+    [mode, teamId, userId]
   );
 
   const requestGps = useCallback(() => {
@@ -112,6 +123,9 @@ export function useLocationTracking({
     setPermissionDialogOpen(false);
     setManualPickerOpen(false);
     persistMode("gps");
+    logVenueAnalyticsEvent("location_permission_granted", {
+      mode: "gps",
+    });
   }, [persistMode]);
 
   const requestManual = useCallback(() => {
@@ -119,6 +133,9 @@ export function useLocationTracking({
     setPermissionDialogOpen(false);
     setManualPickerOpen(true);
     persistMode("manual");
+    logVenueAnalyticsEvent("location_permission_granted", {
+      mode: "manual",
+    });
   }, [persistMode]);
 
   const skipLocation = useCallback(() => {
@@ -126,6 +143,9 @@ export function useLocationTracking({
     setPermissionDialogOpen(false);
     setManualPickerOpen(false);
     persistMode("skipped");
+    logVenueAnalyticsEvent("location_permission_denied", {
+      mode: "skipped",
+    });
   }, [persistMode]);
 
   const selectManualZone = useCallback(
@@ -137,6 +157,10 @@ export function useLocationTracking({
     },
     [persistMode, pushLocationUpdate]
   );
+
+  useEffect(() => {
+    currentZoneIdRef.current = currentZoneId;
+  }, [currentZoneId]);
 
   useEffect(() => {
     if (typeof document === "undefined") {

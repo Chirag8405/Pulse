@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import dynamic from "next/dynamic";
 import { Activity, CalendarCheck2, MapPinned, Users2 } from "lucide-react";
 import { AuthGuard } from "@/components/layout/AuthGuard";
@@ -15,6 +16,7 @@ import {
   useTeamsByEvent,
   useZoneOccupancy,
 } from "@/hooks/useAdminRealtime";
+import { logScreenView, logVenueAnalyticsEvent } from "@/lib/firebase/analytics";
 import type { Event } from "@/types/firebase";
 
 const VenueHeatmap = dynamic(() => import("@/components/admin/VenueHeatmap"), {
@@ -48,6 +50,11 @@ function getStartOfTodayMillis(): number {
 }
 
 function AdminOverviewContent() {
+  useEffect(() => {
+    logScreenView("AdminDashboard", "AdminOverview");
+    logVenueAnalyticsEvent("admin_dashboard_viewed");
+  }, []);
+
   const { data: events, loading: eventsLoading, error: eventsError } = useEventsFeed(60);
   const {
     data: challenges,

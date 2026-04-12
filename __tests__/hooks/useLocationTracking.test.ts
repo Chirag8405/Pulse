@@ -14,6 +14,10 @@ vi.mock("@/lib/firebase/helpers", () => ({
   updateUserLocation: updateUserLocationMock,
 }));
 
+vi.mock("@/lib/firebase/analytics", () => ({
+  logVenueAnalyticsEvent: vi.fn(),
+}));
+
 vi.mock("@/lib/utils", () => ({
   haversineDistance: vi.fn(() => 100),
 }));

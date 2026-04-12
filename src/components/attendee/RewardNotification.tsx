@@ -3,6 +3,7 @@
 import { useCallback, useEffect } from "react";
 import confetti from "canvas-confetti";
 import { Button } from "@/components/ui/button";
+import { logVenueAnalyticsEvent } from "@/lib/firebase/analytics";
 import type { Challenge } from "@/types/firebase";
 
 interface RewardNotificationProps {
@@ -35,6 +36,13 @@ export function RewardNotification({
   useEffect(() => {
     if (!open) {
       return;
+    }
+
+    if (challenge) {
+      logVenueAnalyticsEvent("reward_unlocked", {
+        challengeId: challenge.id,
+        rewardType: challenge.reward.type,
+      });
     }
 
     const reduceMotion =

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { useTheme } from "next-themes";
@@ -33,10 +33,12 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { TEAM_MAPPINGS } from "@/constants/teams";
 import { useAuth } from "@/hooks/useAuth";
+import { logScreenView } from "@/lib/firebase/analytics";
 import { getTeamById } from "@/lib/firebase/helpers";
 import { deleteAccount, signOut } from "@/lib/firebase/auth";
 import { UserProfileUpdateSchema } from "@/lib/schemas";
 import { userDoc } from "@/lib/firebase/collections";
+import { uploadVenueAsset } from "@/lib/firebase/storage";
 import { getErrorMessage } from "@/lib/shared/errorUtils";
 import { useAuthStore } from "@/stores/authStore";
 
@@ -95,6 +97,7 @@ function ProfileContent() {
   const [confirmSignOutOpen, setConfirmSignOutOpen] = useState(false);
   const [confirmDeleteAccountOpen, setConfirmDeleteAccountOpen] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const [avatarUploading, setAvatarUploading] = useState(false);
 
   const displayNameInput = displayNameDraft ?? sourceDisplayName;
 
@@ -146,6 +149,10 @@ function ProfileContent() {
       eventsAttended: Math.max(0, Math.round(challengesCompleted / 3)),
     };
   }, [firestoreUser?.totalChallengesCompleted, firestoreUser?.totalPoints, teamDoc?.currentSpreadScore]);
+
+  useEffect(() => {
+    logScreenView("Profile", "AttendeeProfile");
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -225,6 +232,51 @@ function ProfileContent() {
     }
   };
 
+  const handleAvatarUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = event.target.files?.[0] ?? null;
+
+    // Allows selecting the same file again after a failed upload attempt.
+    event.target.value = "";
+
+    if (!selectedFile || !firestoreUser?.uid) {
+      return;
+    }
+
+    if (!selectedFile.type.startsWith("image/")) {
+      toast.error("Please select an image file.");
+      return;
+    }
+
+    if (selectedFile.size > 2 * 1024 * 1024) {
+      toast.error("Image must be 2MB or smaller.");
+      return;
+    }
+
+    const extension = selectedFile.name.split(".").pop()?.toLowerCase() ?? "jpg";
+    const storagePath = `users/${firestoreUser.uid}/avatar-${Date.now()}.${extension}`;
+
+    setAvatarUploading(true);
+
+    try {
+      const photoURL = await uploadVenueAsset(storagePath, selectedFile, selectedFile.type);
+
+      await updateDoc(userDoc(firestoreUser.uid), {
+        photoURL,
+      });
+
+      setFirestoreUser({
+        ...firestoreUser,
+        photoURL,
+      });
+
+      toast.success("Profile photo updated.");
+    } catch (uploadError) {
+      toast.error(getProfileErrorMessage(uploadError));
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
+
   const handleConfirmSignOut = async () => {
     try {
       await signOut();
@@ -269,6 +321,25 @@ function ProfileContent() {
               <AvatarImage src={firestoreUser?.photoURL ?? undefined} />
               <AvatarFallback className="text-lg font-bold">{initials}</AvatarFallback>
             </Avatar>
+
+            <div className="mt-3">
+              <label
+                htmlFor="profile-avatar-upload"
+                className="inline-flex cursor-pointer items-center justify-center border-2 border-border px-3 py-1 font-mono text-xs font-bold uppercase tracking-wider"
+              >
+                {avatarUploading ? "Uploading..." : "Upload Photo"}
+              </label>
+              <input
+                id="profile-avatar-upload"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="sr-only"
+                disabled={avatarUploading || !firestoreUser?.uid}
+                onChange={(event) => {
+                  void handleAvatarUpload(event);
+                }}
+              />
+            </div>
 
             <h2 className="mt-3 text-xl font-bold">
               {firestoreUser?.displayName ?? "Anonymous Fan"}

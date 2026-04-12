@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { getDocs, orderBy, query } from "firebase/firestore";
 import { useQuery } from "@tanstack/react-query";
 import { Trophy } from "lucide-react";
@@ -16,6 +16,7 @@ import { useActiveEvent } from "@/hooks/useActiveEvent";
 import { useChallengesFeed } from "@/hooks/useAdminRealtime";
 import { useAuth } from "@/hooks/useAuth";
 import { useLeaderboard } from "@/hooks/useLeaderboard";
+import { logScreenView, logVenueAnalyticsEvent } from "@/lib/firebase/analytics";
 import { teamsCollection } from "@/lib/firebase/collections";
 import { cn } from "@/lib/utils";
 import type { ChallengeTeamProgress, Team } from "@/types/firebase";
@@ -258,6 +259,14 @@ function LeaderboardPanel({
 
 function LeaderboardContent() {
   const { firestoreUser } = useAuth();
+
+  useEffect(() => {
+    logScreenView("Leaderboard");
+    logVenueAnalyticsEvent("leaderboard_viewed", {
+      scope: "attendee",
+    });
+  }, []);
+
   const { data: activeEvent, loading: activeEventLoading, error: activeEventError } =
     useActiveEvent();
   const {

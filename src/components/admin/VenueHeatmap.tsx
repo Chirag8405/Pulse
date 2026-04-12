@@ -1,46 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { importLibrary, setOptions } from "@googlemaps/js-api-loader";
 import { Expand, Map } from "lucide-react";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ZONES } from "@/constants";
+import { safeLoadGoogleMaps } from "@/lib/google/maps";
 
 interface VenueHeatmapProps {
   occupancyData: Record<string, number>;
 }
 
-interface GoogleMapLike {
-  setOptions: (options: { styles?: unknown[] }) => void;
-  getZoom: () => number | undefined;
-  setZoom: (zoom: number) => void;
-  unbindAll: () => void;
-}
-
-interface GoogleCircleLike {
-  setMap: (map: GoogleMapLike | null) => void;
-  setOptions: (options: Record<string, unknown>) => void;
-  addListener: (eventName: string, handler: () => void) => void;
-}
-
-interface GoogleInfoWindowLike {
-  setContent: (content: string) => void;
-  setPosition: (position: { lat: number; lng: number }) => void;
-  open: (options: { map: GoogleMapLike; shouldFocus?: boolean }) => void;
-  close: () => void;
-}
-
-interface GoogleMapsApi {
-  maps: {
-    Map: new (element: HTMLElement, options: Record<string, unknown>) => GoogleMapLike;
-    Circle: new (options: Record<string, unknown>) => GoogleCircleLike;
-    InfoWindow: new () => GoogleInfoWindowLike;
-  };
-}
-
 interface ZoneCircleEntry {
   zoneId: string;
-  circle: GoogleCircleLike;
+  circle: google.maps.Circle;
 }
 
 const MAP_CENTER = { lat: 18.9388, lng: 72.8252 };
@@ -48,7 +20,7 @@ const DEFAULT_ZOOM = 17;
 const MIN_ZOOM = 16;
 const MAX_ZOOM = 19;
 
-const DARK_SATELLITE_STYLES = [
+const DARK_SATELLITE_STYLES: google.maps.MapTypeStyle[] = [
   {
     elementType: "geometry",
     stylers: [{ saturation: -20 }, { lightness: -12 }],
@@ -82,18 +54,6 @@ const DARK_SATELLITE_STYLES = [
     stylers: [{ color: "#0f172a" }],
   },
 ];
-
-let mapsOptionsConfigured = false;
-
-function getGoogleApi(): GoogleMapsApi | null {
-  const candidate = (window as Window & { google?: unknown }).google;
-
-  if (!candidate) {
-    return null;
-  }
-
-  return candidate as GoogleMapsApi;
-}
 
 function getActiveAttendeeCount(occupancyData: Record<string, number>): number {
   return Object.values(occupancyData).reduce((sum, count) => sum + count, 0);
@@ -133,7 +93,7 @@ function buildInfoWindowContent(
   `;
 }
 
-function applyThemeStyle(map: GoogleMapLike): void {
+function applyThemeStyle(map: google.maps.Map): void {
   const isDarkTheme = document.documentElement.classList.contains("dark");
 
   map.setOptions({
@@ -171,7 +131,7 @@ function getZoneCircleOptions(
   zoneId: string,
   occupancyData: Record<string, number>,
   isActiveTarget: boolean
-): Record<string, unknown> {
+): google.maps.CircleOptions {
   const occupancyPercent = getZoneOccupancyPercent(zoneId, occupancyData);
   const baseColor = getCircleColor(occupancyPercent);
 
@@ -189,8 +149,8 @@ export default function VenueHeatmap({ occupancyData }: VenueHeatmapProps) {
   const mapRootRef = useRef<HTMLDivElement>(null);
   const mapCanvasRef = useRef<HTMLDivElement>(null);
 
-  const mapRef = useRef<GoogleMapLike | null>(null);
-  const infoWindowRef = useRef<GoogleInfoWindowLike | null>(null);
+  const mapRef = useRef<google.maps.Map | null>(null);
+  const infoWindowRef = useRef<google.maps.InfoWindow | null>(null);
   const circlesRef = useRef<ZoneCircleEntry[]>([]);
   const mutationObserverRef = useRef<MutationObserver | null>(null);
 
@@ -244,20 +204,14 @@ export default function VenueHeatmap({ occupancyData }: VenueHeatmapProps) {
 
     const initializeMap = async () => {
       try {
-        if (!mapsOptionsConfigured) {
-          setOptions({
-            key: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY!,
-            v: "weekly",
-            libraries: ["maps"],
-          });
-          mapsOptionsConfigured = true;
+        const googleApi = await safeLoadGoogleMaps();
+
+        if (disposed || !mapCanvasRef.current) {
+          return;
         }
 
-        await importLibrary("maps");
-
-        const googleApi = getGoogleApi();
-
-        if (disposed || !mapCanvasRef.current || !googleApi) {
+        if (!googleApi) {
+          setMapError("load-failed");
           return;
         }
 
