@@ -457,9 +457,9 @@ function ProfileContent() {
 
             <div className="flex items-center justify-between border-2 border-border px-3 py-3">
               <div>
-                <p className="text-sm font-bold">Share my location during challenges</p>
+                <label htmlFor="location-toggle" className="text-sm font-bold">Share my location during challenges</label>
               </div>
-              <Switch checked={shareLocation} onCheckedChange={handleLocationToggle} />
+              <Switch id="location-toggle" checked={shareLocation} onCheckedChange={handleLocationToggle} />
             </div>
 
             <div>
