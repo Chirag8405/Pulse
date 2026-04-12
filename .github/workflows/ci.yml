@@ -27,3 +27,10 @@ jobs:
       - run: pnpm lint
       - run: pnpm test
       - run: pnpm build
+        env:
+          NEXT_PUBLIC_FIREBASE_API_KEY: ci-api-key
+          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ci.firebaseapp.com
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: ci-project
+          NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ci-project.appspot.com
+          NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: "1234567890"
+          NEXT_PUBLIC_FIREBASE_APP_ID: "1:1234567890:web:abcdef123456"
