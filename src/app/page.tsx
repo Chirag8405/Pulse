@@ -29,7 +29,7 @@ export default function HomePage() {
   }, [firestoreUser?.teamId, isAdmin, isAuthenticated, loading, router]);
 
   return (
-    <main className="bg-background text-foreground">
+    <div className="bg-background text-foreground">
       <section
         className="flex min-h-screen items-center justify-center px-4 py-14"
         style={{
@@ -159,6 +159,6 @@ export default function HomePage() {
           </p>
         </div>
       </footer>
-    </main>
+    </div>
   );
 }

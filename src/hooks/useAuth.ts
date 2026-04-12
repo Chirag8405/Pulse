@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { User as FirebaseUser } from "firebase/auth";
 import { onAuthChange } from "@/lib/firebase/auth";
 import { getOrCreateUser } from "@/lib/firebase/helpers";
+import { getErrorMessage } from "@/lib/shared/errorUtils";
 import { useAuthStore } from "@/stores/authStore";
 import type { User } from "@/types/firebase";
 
@@ -17,13 +18,8 @@ interface UseAuthResult {
   isAuthenticated: boolean;
 }
 
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return "Authentication failed";
-}
+const getAuthErrorMessage = (error: unknown) =>
+  getErrorMessage(error, "Authentication failed");
 
 interface PulseE2EAuthPayload {
   uid: string;
@@ -103,7 +99,7 @@ export function useAuth(): UseAuthResult {
         setFirestoreUser(syncedUser);
       } catch (authError) {
         setFirestoreUser(null);
-        setError(getErrorMessage(authError));
+        setError(getAuthErrorMessage(authError));
       } finally {
         setIsAuthReady(true);
         setLoading(false);

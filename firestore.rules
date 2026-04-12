@@ -87,5 +87,10 @@ service cloud.firestore {
         request.resource.data.teamId == teamId &&
         (resource == null || request.time > resource.data.timestamp + duration.value(10, 's'));
     }
+
+    // Server-only metadata — deny all client access.
+    match /meta/{docId} {
+      allow read, write: if false;
+    }
   }
 }

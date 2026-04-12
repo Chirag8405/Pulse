@@ -94,13 +94,21 @@ describe("getErrorMessage", () => {
     expect(getErrorMessage(new Error("test error"))).toBe("test error");
   });
 
-  it("returns fallback for non-Error values", () => {
-    expect(getErrorMessage("string")).toBe("An unexpected error occurred.");
+  it("returns the string directly for non-empty string values", () => {
+    expect(getErrorMessage("string error")).toBe("string error");
+  });
+
+  it("returns fallback for non-string, non-Error values", () => {
     expect(getErrorMessage(42)).toBe("An unexpected error occurred.");
     expect(getErrorMessage(null)).toBe("An unexpected error occurred.");
   });
 
-  it("uses custom fallback when provided", () => {
-    expect(getErrorMessage("oops", "custom fallback")).toBe("custom fallback");
+  it("returns fallback for empty strings", () => {
+    expect(getErrorMessage("")).toBe("An unexpected error occurred.");
+  });
+
+  it("uses custom fallback when provided for non-string values", () => {
+    expect(getErrorMessage(null, "custom fallback")).toBe("custom fallback");
+    expect(getErrorMessage(42, "custom fallback")).toBe("custom fallback");
   });
 });

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { apiLogger } from "@/lib/google/logging";
+import { logAuditEvent } from "@/lib/server/auditLog";
+import { checkRateLimit, rateLimitHeaders } from "@/lib/server/rateLimit";
 import { getBearerToken } from "@/lib/shared/authUtils";
 
 interface UserDeleteDoc {
@@ -32,6 +35,14 @@ export async function DELETE(request: NextRequest) {
     const decodedToken = await adminAuth.verifyIdToken(token);
     const uid = decodedToken.uid;
 
+    const rateCheck = checkRateLimit(`delete:${uid}`, 3, 60_000);
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { error: "Too many requests" },
+        { status: 429, headers: rateLimitHeaders(rateCheck) }
+      );
+    }
+
     const userReference = adminDb.collection("users").doc(uid);
     const userSnapshot = await userReference.get();
     const userData = userSnapshot.exists ? (userSnapshot.data() as UserDeleteDoc) : null;
@@ -59,6 +70,9 @@ export async function DELETE(request: NextRequest) {
 
     await batch.commit();
     await adminAuth.deleteUser(uid);
+
+    logAuditEvent("user.deleted", uid);
+    apiLogger.info("Account deleted", { uid });
 
     return NextResponse.json({ success: true });
   } catch (error) {

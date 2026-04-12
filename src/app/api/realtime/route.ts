@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { ZONES } from "@/constants";
 import { adminDb } from "@/lib/firebase/admin";
+import { checkRateLimit, rateLimitHeaders } from "@/lib/server/rateLimit";
 import { readIsAdmin, verifyBearerToken } from "@/lib/server/requestAuth";
 
 export const dynamic = "force-dynamic";
@@ -299,6 +300,14 @@ export async function GET(request: NextRequest) {
   const authResult = await verifyBearerToken(request);
   if (!authResult.ok || !authResult.uid) {
     return authResult.response!;
+  }
+
+  const rateCheck = checkRateLimit(`realtime:${authResult.uid}`, 120, 60_000);
+  if (!rateCheck.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests" },
+      { status: 429, headers: rateLimitHeaders(rateCheck) }
+    );
   }
 
   const parsed = QuerySchema.safeParse({

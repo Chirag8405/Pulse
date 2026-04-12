@@ -10,17 +10,32 @@ import {
 } from "firebase/firestore";
 import { getAuth, type Auth } from "firebase/auth";
 
+const NON_PROD_FIREBASE_DEFAULTS: Readonly<Record<string, string>> = {
+  NEXT_PUBLIC_FIREBASE_API_KEY: "dev-api-key",
+  NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: "dev-auth-domain.firebaseapp.com",
+  NEXT_PUBLIC_FIREBASE_PROJECT_ID: "dev-project-id",
+  NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: "dev-project-id.appspot.com",
+  NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: "1234567890",
+  NEXT_PUBLIC_FIREBASE_APP_ID: "1:1234567890:web:abcdef123456",
+};
+
 function requireEnvVar(name: string): string {
   const value = process.env[name];
 
-  if (!value) {
-    throw new Error(
-      `Missing required environment variable: ${name}. ` +
-      `Add it to .env.local (see .env.example for reference).`
-    );
+  if (value) {
+    return value;
   }
 
-  return value;
+  // Keep production strict while allowing local/test runs to boot with
+  // deterministic dummy values used only for mock-auth and non-prod testing.
+  if (process.env.NODE_ENV !== "production") {
+    return NON_PROD_FIREBASE_DEFAULTS[name] ?? `dev-${name.toLowerCase()}`;
+  }
+
+  throw new Error(
+    `Missing required environment variable: ${name}. ` +
+    `Add it to .env.local (see .env.example for reference).`
+  );
 }
 
 const firebaseConfig = {

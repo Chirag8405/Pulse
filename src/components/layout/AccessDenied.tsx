@@ -5,15 +5,11 @@ import Link from "next/link";
 import { ShieldOff } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { getOrCreateUser } from "@/lib/firebase/helpers";
+import { getErrorMessage } from "@/lib/shared/errorUtils";
 import { useAuthStore } from "@/stores/authStore";
 
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return "Could not refresh access status.";
-}
+const getAccessDeniedErrorMessage = (error: unknown) =>
+  getErrorMessage(error, "Could not refresh access status.");
 
 export function AccessDenied() {
   const { user, isAdmin } = useAuth();
@@ -36,7 +32,7 @@ export function AccessDenied() {
       const syncedUser = await getOrCreateUser(user);
       setFirestoreUser(syncedUser);
     } catch (error) {
-      setRefreshError(getErrorMessage(error));
+      setRefreshError(getAccessDeniedErrorMessage(error));
     } finally {
       setRefreshing(false);
     }

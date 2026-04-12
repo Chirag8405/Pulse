@@ -37,6 +37,7 @@ import { getTeamById } from "@/lib/firebase/helpers";
 import { deleteAccount, signOut } from "@/lib/firebase/auth";
 import { UserProfileUpdateSchema } from "@/lib/schemas";
 import { userDoc } from "@/lib/firebase/collections";
+import { getErrorMessage } from "@/lib/shared/errorUtils";
 import { useAuthStore } from "@/stores/authStore";
 
 type SaveState = "idle" | "saving" | "saved" | "error";
@@ -67,13 +68,8 @@ function getInitials(displayName: string | null, email: string | null): string {
   return source.slice(0, 2).toUpperCase();
 }
 
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return "Action failed. Please try again.";
-}
+const getProfileErrorMessage = (error: unknown) =>
+  getErrorMessage(error, "Action failed. Please try again.");
 
 function ProfileContent() {
   const router = useRouter();
@@ -235,7 +231,7 @@ function ProfileContent() {
       setConfirmSignOutOpen(false);
       router.push("/login");
     } catch (signOutError) {
-      toast.error(getErrorMessage(signOutError));
+      toast.error(getProfileErrorMessage(signOutError));
     }
   };
 
@@ -248,7 +244,7 @@ function ProfileContent() {
       toast.success("Account deleted.");
       router.replace("/login");
     } catch (deleteError) {
-      toast.error(getErrorMessage(deleteError));
+      toast.error(getProfileErrorMessage(deleteError));
     } finally {
       setDeletingAccount(false);
     }

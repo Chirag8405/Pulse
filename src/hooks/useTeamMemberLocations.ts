@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { onSnapshot, query, where } from "firebase/firestore";
 import { memberLocationsCollection } from "@/lib/firebase/collections";
+import { getErrorMessage } from "@/lib/shared/errorUtils";
 import type { MemberLocation } from "@/types/firebase";
 
 interface TeamMemberLocationData {
@@ -17,13 +18,8 @@ interface UseTeamMemberLocationsResult {
   error: string | null;
 }
 
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return "Could not load team member locations.";
-}
+const getTeamLocationErrorMessage = (error: unknown) =>
+  getErrorMessage(error, "Could not load team member locations.");
 
 const INITIAL_DATA: TeamMemberLocationData = {
   byZone: {},
@@ -80,7 +76,7 @@ export function useTeamMemberLocations(
       setSnapshot({
         teamId,
         data: INITIAL_DATA,
-        error: getErrorMessage(snapshotError),
+        error: getTeamLocationErrorMessage(snapshotError),
       });
     },
     [teamId]

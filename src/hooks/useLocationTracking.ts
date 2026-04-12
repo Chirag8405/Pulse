@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { LOCATION_UPDATE_INTERVAL_MS, ZONES } from "@/constants";
 import { updateUserLocation } from "@/lib/firebase/helpers";
+import { getErrorMessage } from "@/lib/shared/errorUtils";
 import { haversineDistance } from "@/lib/utils";
 
 type LocationMode = "unset" | "gps" | "manual" | "skipped";
@@ -32,13 +33,8 @@ interface UseLocationTrackingResult {
 
 const LOCATION_MODE_KEY = "pulse_location_permission";
 
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return "Could not update your location.";
-}
+const getLocationErrorMessage = (error: unknown) =>
+  getErrorMessage(error, "Could not update your location.");
 
 function getNearestZoneId(lat: number, lng: number): string {
   const nearestZone = ZONES.toSorted((left, right) => {
@@ -103,7 +99,7 @@ export function useLocationTracking({
 
         await updateUserLocation(userId, teamId, zoneId);
       } catch (locationError) {
-        setError(getErrorMessage(locationError));
+        setError(getLocationErrorMessage(locationError));
       } finally {
         setLoading(false);
       }

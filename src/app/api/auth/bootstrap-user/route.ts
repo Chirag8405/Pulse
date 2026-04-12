@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { VENUE_NAME } from "@/constants";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { apiLogger } from "@/lib/google/logging";
+import { logAuditEvent } from "@/lib/server/auditLog";
+import { checkRateLimit, rateLimitHeaders } from "@/lib/server/rateLimit";
 import { getBearerToken, isAdminLikeValue } from "@/lib/shared/authUtils";
 
 interface UserBootstrapDoc {
@@ -132,6 +135,14 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const rateCheck = checkRateLimit(`bootstrap:${token.slice(-8)}`, 30, 60_000);
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { error: "Too many requests" },
+        { status: 429, headers: rateLimitHeaders(rateCheck) }
+      );
+    }
+
     const decodedToken = await adminAuth.verifyIdToken(token);
     const uid = decodedToken.uid;
     const normalizedEmail = (decodedToken.email ?? "").trim().toLowerCase();
@@ -172,6 +183,14 @@ export async function POST(request: NextRequest) {
       }
 
       await userReference.set(safeProfilePayload, { merge: true });
+
+      if (shouldPromoteToAdmin) {
+        logAuditEvent("user.promoted_admin", uid, {
+          metadata: { email: normalizedEmail || null },
+        });
+      }
+
+      apiLogger.info("Bootstrap: existing user synced", { uid, isAdmin: resolvedIsAdmin });
 
       return NextResponse.json({
         isAdmin: resolvedIsAdmin,
@@ -226,6 +245,12 @@ export async function POST(request: NextRequest) {
     }
 
     await userReference.set(newUserPayload, { merge: true });
+
+    logAuditEvent("user.created", uid, {
+      metadata: { email: normalizedEmail || null, isAdmin },
+    });
+
+    apiLogger.info("Bootstrap: new user created", { uid, isAdmin });
 
     return NextResponse.json({
       isAdmin,

@@ -12,6 +12,8 @@
 
 # testing
 /coverage
+/playwright-report
+/test-results
 
 # next.js
 /.next/
@@ -44,5 +46,3 @@ next-env.d.ts
 # local agent context files
 AGENTS.md
 CLAUDE.md
-
-test-results/

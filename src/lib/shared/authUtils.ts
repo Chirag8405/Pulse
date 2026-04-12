@@ -50,15 +50,7 @@ export function isAdminLikeValue(value: unknown): boolean {
 }
 
 /**
- * Extracts an error message from an unknown thrown value.
+ * Re-export from the centralized error utility for backward compatibility.
+ * @see getErrorMessage from @/lib/shared/errorUtils
  */
-export function getErrorMessage(
-  error: unknown,
-  fallback = "An unexpected error occurred."
-): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return fallback;
-}
+export { getErrorMessage } from "@/lib/shared/errorUtils";

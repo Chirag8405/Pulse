@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { apiLogger } from "@/lib/google/logging";
+import { logAuditEvent } from "@/lib/server/auditLog";
+import { checkRateLimit, rateLimitHeaders } from "@/lib/server/rateLimit";
 import { getBearerToken } from "@/lib/shared/authUtils";
 
 interface TeamJoinPayload {
@@ -38,6 +41,14 @@ export async function POST(request: NextRequest) {
   try {
     const decodedToken = await adminAuth.verifyIdToken(token);
     const uid = decodedToken.uid;
+
+    const rateCheck = checkRateLimit(`team-join:${uid}`, 10, 60_000);
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { error: "Too many requests" },
+        { status: 429, headers: rateLimitHeaders(rateCheck) }
+      );
+    }
 
     const userReference = adminDb.collection("users").doc(uid);
     const teamReference = adminDb.collection("teams").doc(teamId);
@@ -78,6 +89,9 @@ export async function POST(request: NextRequest) {
         { merge: true }
       );
     });
+
+    logAuditEvent("team.joined", uid, { targetId: teamId });
+    apiLogger.info("User joined team", { uid, teamId });
 
     return NextResponse.json({ success: true, teamId });
   } catch (error) {

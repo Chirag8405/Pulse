@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { limit, onSnapshot, orderBy, query, where } from "firebase/firestore";
 import { eventsCollection } from "@/lib/firebase/collections";
 import { fetchEventsFeed as fetchEventsFeedFromApi } from "@/lib/firebase/realtimeApi";
+import { getErrorMessage } from "@/lib/shared/errorUtils";
 import type { Event } from "@/types/firebase";
 
 interface UseActiveEventResult {
@@ -12,13 +13,9 @@ interface UseActiveEventResult {
   error: string | null;
 }
 
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return "Could not load active event.";
-}
+/** @see getErrorMessage from @/lib/shared/errorUtils */
+const getActiveEventErrorMessage = (error: unknown) =>
+  getErrorMessage(error, "Could not load active event.");
 
 const shouldUseRealtimeListeners =
   typeof window !== "undefined" &&
@@ -55,7 +52,7 @@ export function useActiveEvent(): UseActiveEventResult {
   }, []);
 
   const handleSnapshotError = useCallback((snapshotError: unknown) => {
-    setError(getErrorMessage(snapshotError));
+    setError(getActiveEventErrorMessage(snapshotError));
     setLoading(false);
   }, []);
 
@@ -86,7 +83,7 @@ export function useActiveEvent(): UseActiveEventResult {
             return;
           }
 
-          setError(getErrorMessage(error));
+          setError(getActiveEventErrorMessage(error));
           setLoading(false);
         } finally {
           inFlight = false;

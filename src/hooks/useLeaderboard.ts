@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { limit, onSnapshot, orderBy, query } from "firebase/firestore";
 import { teamProgressCollection } from "@/lib/firebase/collections";
 import { fetchChallengeTeamProgress as fetchChallengeTeamProgressFromApi } from "@/lib/firebase/realtimeApi";
+import { getErrorMessage } from "@/lib/shared/errorUtils";
 import type { ChallengeTeamProgress } from "@/types/firebase";
 
 interface UseLeaderboardResult {
@@ -12,13 +13,8 @@ interface UseLeaderboardResult {
   error: string | null;
 }
 
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return "Could not load leaderboard.";
-}
+const getLeaderboardErrorMessage = (error: unknown) =>
+  getErrorMessage(error, "Could not load leaderboard.");
 
 const shouldUseRealtimeListeners =
   typeof window !== "undefined" &&
@@ -123,7 +119,7 @@ export function useLeaderboard(
           setSnapshot({
             key,
             data: [],
-            error: getErrorMessage(error),
+            error: getLeaderboardErrorMessage(error),
             resolved: true,
           });
         } finally {
@@ -162,7 +158,7 @@ export function useLeaderboard(
         setSnapshot({
           key,
           data: [],
-          error: getErrorMessage(snapshotError),
+          error: getLeaderboardErrorMessage(snapshotError),
           resolved: true,
         });
       }

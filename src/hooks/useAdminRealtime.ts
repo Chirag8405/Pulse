@@ -22,6 +22,7 @@ import {
   fetchTeamsByEvent as fetchTeamsByEventFromApi,
   fetchZoneOccupancy as fetchZoneOccupancyFromApi,
 } from "@/lib/firebase/realtimeApi";
+import { getErrorMessage } from "@/lib/shared/errorUtils";
 import type { Challenge, Event, Team } from "@/types/firebase";
 
 interface FeedResult<T> {
@@ -43,13 +44,8 @@ interface KeyedResolvedState<T> {
   resolved: boolean;
 }
 
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return "Failed to load realtime data.";
-}
+const getRealtimeErrorMessage = (error: unknown) =>
+  getErrorMessage(error, "Failed to load realtime data.");
 
 function buildEmptyZoneCounts(): Record<string, number> {
   return ZONES.reduce<Record<string, number>>((acc, zone) => {
@@ -149,7 +145,7 @@ export function useEventsFeed(feedLimit = 30): FeedResult<Event[]> {
   const handleSnapshotError = useCallback((snapshotError: unknown) => {
     setState({
       data: [],
-      error: getErrorMessage(snapshotError),
+      error: getRealtimeErrorMessage(snapshotError),
       resolved: true,
     });
   }, []);
@@ -170,7 +166,7 @@ export function useEventsFeed(feedLimit = 30): FeedResult<Event[]> {
         } catch (error) {
           setState({
             data: [],
-            error: getErrorMessage(error),
+            error: getRealtimeErrorMessage(error),
             resolved: true,
           });
         }
@@ -222,7 +218,7 @@ export function useChallengesFeed(feedLimit = 100): FeedResult<Challenge[]> {
   const handleSnapshotError = useCallback((snapshotError: unknown) => {
     setState({
       data: [],
-      error: getErrorMessage(snapshotError),
+      error: getRealtimeErrorMessage(snapshotError),
       resolved: true,
     });
   }, []);
@@ -243,7 +239,7 @@ export function useChallengesFeed(feedLimit = 100): FeedResult<Challenge[]> {
         } catch (error) {
           setState({
             data: [],
-            error: getErrorMessage(error),
+            error: getRealtimeErrorMessage(error),
             resolved: true,
           });
         }
@@ -309,7 +305,7 @@ export function useTeamsByEvent(
       setState({
         key: eventId,
         data: [],
-        error: getErrorMessage(snapshotError),
+        error: getRealtimeErrorMessage(snapshotError),
         resolved: true,
       });
     },
@@ -336,7 +332,7 @@ export function useTeamsByEvent(
           setState({
             key: eventId,
             data: [],
-            error: getErrorMessage(error),
+            error: getRealtimeErrorMessage(error),
             resolved: true,
           });
         }
@@ -416,7 +412,7 @@ export function useZoneOccupancy(): FeedResult<ZoneOccupancyData> {
   const handleSnapshotError = useCallback((snapshotError: unknown) => {
     setState((currentState) => ({
       data: currentState.data,
-      error: getErrorMessage(snapshotError),
+      error: getRealtimeErrorMessage(snapshotError),
       resolved: true,
     }));
   }, []);
@@ -439,7 +435,7 @@ export function useZoneOccupancy(): FeedResult<ZoneOccupancyData> {
         } catch (error) {
           setState((currentState) => ({
             data: currentState.data,
-            error: getErrorMessage(error),
+            error: getRealtimeErrorMessage(error),
             resolved: true,
           }));
         }

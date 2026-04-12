@@ -69,9 +69,9 @@ export default function AttendeeLayout({ children }: AttendeeLayoutProps) {
         </div>
       </header>
 
-      <main className="pb-16 md:pb-0" role="main">
+      <div className="pb-16 md:pb-0">
         {children}
-      </main>
+      </div>
 
       <nav
         className="fixed inset-x-0 bottom-0 z-50 border-t-2 border-border bg-background md:hidden"

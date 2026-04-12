@@ -155,9 +155,9 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           </div>
         </header>
 
-        <main className="p-4 md:p-6" role="main">
+        <div className="p-4 md:p-6">
           {children}
-        </main>
+        </div>
       </div>
 
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>

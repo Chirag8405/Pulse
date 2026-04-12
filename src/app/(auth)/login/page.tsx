@@ -10,6 +10,7 @@ import {
 } from "@/lib/firebase/auth";
 import { useAuth } from "@/hooks/useAuth";
 import { APP_NAME, APP_TAGLINE } from "@/constants";
+import { getErrorMessage } from "@/lib/shared/errorUtils";
 
 type PendingMethod = "google" | "guest" | null;
 
@@ -41,18 +42,14 @@ function GoogleGIcon() {
   );
 }
 
-function getErrorMessage(error: unknown): string {
+function getAuthPageErrorMessage(error: unknown): string {
   const authError = error as FirebaseAuthErrorLike;
 
   if (authError.code === "auth/popup-blocked") {
     return "Popup was blocked. Please allow popups for this site.";
   }
 
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return "Authentication failed. Please try again.";
+  return getErrorMessage(error, "Authentication failed. Please try again.");
 }
 
 function LoginFallback() {
@@ -139,7 +136,7 @@ function LoginContent() {
         forceAccountSelection: true,
       });
     } catch (error) {
-      toast.error(getErrorMessage(error));
+      toast.error(getAuthPageErrorMessage(error));
     } finally {
       setPendingMethod(null);
     }
@@ -151,7 +148,7 @@ function LoginContent() {
     try {
       await signInAnonymously();
     } catch (error) {
-      toast.error(getErrorMessage(error));
+      toast.error(getAuthPageErrorMessage(error));
     } finally {
       setPendingMethod(null);
     }
@@ -160,7 +157,7 @@ function LoginContent() {
   const isPending = pendingMethod !== null;
 
   return (
-    <main
+    <div
       className="flex min-h-screen items-center justify-center bg-background px-4 py-10"
       style={{
         backgroundImage:
@@ -229,7 +226,7 @@ function LoginContent() {
           events.
         </p>
       </section>
-    </main>
+    </div>
   );
 }
 

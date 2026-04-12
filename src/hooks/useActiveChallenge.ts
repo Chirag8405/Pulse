@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { limit, onSnapshot, orderBy, query, where } from "firebase/firestore";
 import { challengesCollection } from "@/lib/firebase/collections";
 import { fetchChallengesFeed as fetchChallengesFeedFromApi } from "@/lib/firebase/realtimeApi";
+import { getErrorMessage } from "@/lib/shared/errorUtils";
 import type { Challenge } from "@/types/firebase";
 
 interface UseActiveChallengeResult {
@@ -12,13 +13,8 @@ interface UseActiveChallengeResult {
   error: string | null;
 }
 
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return "Could not load active challenge.";
-}
+const getActiveChallengeErrorMessage = (error: unknown) =>
+  getErrorMessage(error, "Could not load active challenge.");
 
 const shouldUseRealtimeListeners =
   typeof window !== "undefined" &&
@@ -90,7 +86,7 @@ export function useActiveChallenge(
       setSnapshot({
         eventId,
         data: null,
-        error: getErrorMessage(snapshotError),
+        error: getActiveChallengeErrorMessage(snapshotError),
         resolved: true,
       });
     },

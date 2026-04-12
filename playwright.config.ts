@@ -1,5 +1,22 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const playwrightFirebaseEnv = {
+  NEXT_PUBLIC_FIREBASE_API_KEY:
+    process.env.NEXT_PUBLIC_FIREBASE_API_KEY ?? "playwright-api-key",
+  NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN:
+    process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ?? "playwright.firebaseapp.com",
+  NEXT_PUBLIC_FIREBASE_PROJECT_ID:
+    process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? "playwright-project",
+  NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET:
+    process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ??
+    "playwright-project.appspot.com",
+  NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID:
+    process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID ?? "1234567890",
+  NEXT_PUBLIC_FIREBASE_APP_ID:
+    process.env.NEXT_PUBLIC_FIREBASE_APP_ID ??
+    "1:1234567890:web:abcdef123456",
+};
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
@@ -19,6 +36,10 @@ export default defineConfig({
   ],
   webServer: {
     command: "pnpm dev",
+    env: {
+      ...process.env,
+      ...playwrightFirebaseEnv,
+    },
     url: "http://localhost:3000",
     reuseExistingServer: !process.env.CI,
   },
