@@ -10,6 +10,11 @@ const PROTECTED_PREFIXES = [
   "/profile",
 ] as const;
 
+const scriptUnsafeEval = process.env.NODE_ENV === "production" ? "" : " 'unsafe-eval'";
+const scriptSourcePolicy =
+  `'self' 'unsafe-inline'${scriptUnsafeEval} ` +
+  "https://*.googleapis.com https://*.gstatic.com https://maps.googleapis.com https://apis.google.com https://www.googletagmanager.com";
+
 const SECURITY_HEADERS: Readonly<Record<string, string>> = {
   "X-Frame-Options": "DENY",
   "X-Content-Type-Options": "nosniff",
@@ -17,7 +22,7 @@ const SECURITY_HEADERS: Readonly<Record<string, string>> = {
   "Referrer-Policy": "strict-origin-when-cross-origin",
   "Permissions-Policy": "camera=(), microphone=(), geolocation=(self)",
   "Content-Security-Policy":
-    "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.googleapis.com https://*.gstatic.com https://maps.googleapis.com https://apis.google.com https://www.googletagmanager.com; script-src-elem 'self' 'unsafe-inline' 'unsafe-eval' https://*.googleapis.com https://*.gstatic.com https://maps.googleapis.com https://apis.google.com https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://firebasestorage.googleapis.com https://lh3.googleusercontent.com https://*.googleapis.com https://*.gstatic.com; connect-src 'self' https://*.googleapis.com https://*.firebase.com https://*.firebaseio.com wss://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googletagmanager.com https://www.google-analytics.com https://*.google-analytics.com; frame-src 'self' https://*.firebaseapp.com https://*.google.com https://apis.google.com",
+    `default-src 'self'; script-src ${scriptSourcePolicy}; script-src-elem ${scriptSourcePolicy}; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://firebasestorage.googleapis.com https://lh3.googleusercontent.com https://*.googleapis.com https://*.gstatic.com; connect-src 'self' https://*.googleapis.com https://*.firebase.com https://*.firebaseio.com wss://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googletagmanager.com https://www.google-analytics.com https://*.google-analytics.com; frame-src 'self' https://*.firebaseapp.com https://*.google.com https://apis.google.com`,
 };
 
 function isProtectedPath(pathname: string): boolean {

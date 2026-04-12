@@ -108,6 +108,23 @@ function hasAdminClaim(decodedToken: AdminClaims): boolean {
   return hasAdminRoleValue(decodedToken.role);
 }
 
+async function tryClaimFirstAdmin(uid: string): Promise<boolean> {
+  const firstAdminClaimReference = adminDb
+    .collection("meta")
+    .doc("first-admin-claim");
+
+  try {
+    await firstAdminClaimReference.create({
+      uid,
+      claimedAt: new Date(),
+    });
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function getLegacyUserByEmail(
   email: string | null | undefined,
   uid: string
@@ -211,7 +228,10 @@ export async function POST(request: NextRequest) {
         .where("isAdmin", "==", true)
         .limit(1)
         .get();
-      firstUserAdmin = adminSnapshot.empty;
+
+      if (adminSnapshot.empty) {
+        firstUserAdmin = await tryClaimFirstAdmin(uid);
+      }
     }
 
     const isAdmin = existingAdmin || allowlistedAdmin || firstUserAdmin || claimAdmin;

@@ -75,5 +75,10 @@
     "tsx": "^4.21.0",
     "typescript": "^5",
     "vitest": "^4.1.4"
+  },
+  "pnpm": {
+    "overrides": {
+      "@tootallnate/once": "^3.0.1"
+    }
   }
 }

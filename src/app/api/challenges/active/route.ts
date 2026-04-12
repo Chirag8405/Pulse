@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { adminDb } from "@/lib/firebase/admin";
+import { verifyBearerToken } from "@/lib/server/requestAuth";
 
 const QuerySchema = z.object({
   eventId: z.string().trim().min(1),
@@ -47,6 +48,11 @@ function sanitizeChallenge(challenge: Record<string, unknown>) {
 }
 
 export async function GET(request: NextRequest) {
+  const authResult = await verifyBearerToken(request);
+  if (!authResult.ok) {
+    return authResult.response!;
+  }
+
   const parsed = QuerySchema.safeParse({
     eventId: request.nextUrl.searchParams.get("eventId"),
   });

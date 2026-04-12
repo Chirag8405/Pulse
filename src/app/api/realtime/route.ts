@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { ZONES } from "@/constants";
-import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { adminDb } from "@/lib/firebase/admin";
+import { readIsAdmin, verifyBearerToken } from "@/lib/server/requestAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,8 @@ const ResourceSchema = z.enum([
   "challengeTeamProgress",
 ]);
 
+const ADMIN_ONLY_RESOURCES = new Set(["teamsByEvent", "zoneOccupancy"]);
+
 const QuerySchema = z.object({
   resource: ResourceSchema,
   limit: z.coerce.number().int().min(1).max(300).optional(),
@@ -20,21 +23,11 @@ const QuerySchema = z.object({
   challengeId: z.string().trim().min(1).optional(),
 });
 
-function getBearerToken(request: NextRequest): string | null {
-  const authorizationHeader = request.headers.get("authorization");
-
-  if (!authorizationHeader) {
-    return null;
-  }
-
-  const [scheme, token] = authorizationHeader.split(" ");
-
-  if (scheme?.toLowerCase() !== "bearer" || !token) {
-    return null;
-  }
-
-  return token;
-}
+const ZONE_OCCUPANCY_CACHE_TTL_MS = 15_000;
+let zoneOccupancyCache: {
+  expiresAt: number;
+  byZone: Record<string, number>;
+} | null = null;
 
 function timestampToMillis(value: unknown): number {
   if (
@@ -234,6 +227,11 @@ async function getChallengesSnapshot(limitCount: number) {
 }
 
 async function getZoneOccupancyCounts(): Promise<Record<string, number>> {
+  const now = Date.now();
+  if (zoneOccupancyCache && zoneOccupancyCache.expiresAt > now) {
+    return { ...zoneOccupancyCache.byZone };
+  }
+
   const byZone = ZONES.reduce<Record<string, number>>((acc, zone) => {
     acc[zone.id] = 0;
     return acc;
@@ -256,23 +254,27 @@ async function getZoneOccupancyCounts(): Promise<Record<string, number>> {
       byZone[zoneId] = (byZone[zoneId] ?? 0) + 1;
     });
 
+    zoneOccupancyCache = {
+      byZone: { ...byZone },
+      expiresAt: now + ZONE_OCCUPANCY_CACHE_TTL_MS,
+    };
+
     return byZone;
   } catch {
     const teamsSnapshot = await adminDb.collection("teams").get();
 
     const locationSnapshots = await Promise.all(
       teamsSnapshot.docs.map((teamDocSnapshot) =>
-        teamDocSnapshot.ref.collection("memberLocations").get()
+        teamDocSnapshot.ref
+          .collection("memberLocations")
+          .where("isActive", "==", true)
+          .get()
       )
     );
 
     locationSnapshots.forEach((snapshot) => {
       snapshot.docs.forEach((docSnapshot) => {
         const data = docSnapshot.data() as Record<string, unknown>;
-
-        if (data.isActive !== true) {
-          return;
-        }
 
         const zoneId = toStringValue(data.zoneId);
 
@@ -284,21 +286,19 @@ async function getZoneOccupancyCounts(): Promise<Record<string, number>> {
       });
     });
 
+    zoneOccupancyCache = {
+      byZone: { ...byZone },
+      expiresAt: now + ZONE_OCCUPANCY_CACHE_TTL_MS,
+    };
+
     return byZone;
   }
 }
 
 export async function GET(request: NextRequest) {
-  const token = getBearerToken(request);
-
-  if (!token) {
-    return NextResponse.json({ error: "Missing bearer token" }, { status: 401 });
-  }
-
-  try {
-    await adminAuth.verifyIdToken(token);
-  } catch {
-    return NextResponse.json({ error: "Invalid bearer token" }, { status: 401 });
+  const authResult = await verifyBearerToken(request);
+  if (!authResult.ok || !authResult.uid) {
+    return authResult.response!;
   }
 
   const parsed = QuerySchema.safeParse({
@@ -313,6 +313,14 @@ export async function GET(request: NextRequest) {
   }
 
   const { resource, limit, eventId, challengeId } = parsed.data;
+
+  if (ADMIN_ONLY_RESOURCES.has(resource)) {
+    const isAdmin = await readIsAdmin(authResult.uid);
+
+    if (!isAdmin) {
+      return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+    }
+  }
 
   try {
     if (resource === "events") {

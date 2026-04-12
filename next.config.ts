@@ -5,6 +5,19 @@ const bundleAnalyzer = withBundleAnalyzer({
   enabled: process.env.ANALYZE === "true",
 });
 
+function buildScriptSourceDirective(): string {
+  const unsafeEval = process.env.NODE_ENV === "production" ? "" : " 'unsafe-eval'";
+
+  return [
+    `script-src 'self' 'unsafe-inline'${unsafeEval}`,
+    "https://*.googleapis.com",
+    "https://*.gstatic.com",
+    "https://maps.googleapis.com",
+    "https://apis.google.com",
+    "https://www.googletagmanager.com",
+  ].join(" ");
+}
+
 const nextConfig: NextConfig = {
   output: "standalone",
   reactStrictMode: true,
@@ -37,8 +50,8 @@ const nextConfig: NextConfig = {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://*.googleapis.com https://*.gstatic.com https://maps.googleapis.com https://apis.google.com https://www.googletagmanager.com",
-              "script-src-elem 'self' 'unsafe-eval' 'unsafe-inline' https://*.googleapis.com https://*.gstatic.com https://maps.googleapis.com https://apis.google.com https://www.googletagmanager.com",
+              buildScriptSourceDirective(),
+              buildScriptSourceDirective().replace("script-src", "script-src-elem"),
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
               "font-src 'self' https://fonts.gstatic.com",
               "img-src 'self' data: blob: https://firebasestorage.googleapis.com https://lh3.googleusercontent.com https://*.googleapis.com https://*.gstatic.com",

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { ZONES } from "@/constants";
 import { adminDb } from "@/lib/firebase/admin";
+import { readIsAdmin, verifyBearerToken } from "@/lib/server/requestAuth";
 
 type Trend = "up" | "down" | "steady";
 
@@ -10,6 +11,17 @@ interface OccupancyZonePayload {
   percentage: number;
   trend: Trend;
 }
+
+interface OccupancyResponsePayload {
+  zones: Record<string, OccupancyZonePayload>;
+  generatedAt: string;
+}
+
+const OCCUPANCY_CACHE_TTL_MS = 15_000;
+const occupancyCacheByEvent = new Map<
+  string,
+  { expiresAt: number; payload: OccupancyResponsePayload }
+>();
 
 const QuerySchema = z.object({
   eventId: z.string().trim().min(1),
@@ -29,6 +41,16 @@ function getTimestampMillis(value: unknown): number {
 }
 
 export async function GET(request: NextRequest) {
+  const authResult = await verifyBearerToken(request);
+  if (!authResult.ok || !authResult.uid) {
+    return authResult.response!;
+  }
+
+  const isAdmin = await readIsAdmin(authResult.uid);
+  if (!isAdmin) {
+    return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+  }
+
   const parsed = QuerySchema.safeParse({
     eventId: request.nextUrl.searchParams.get("eventId"),
   });
@@ -41,6 +63,16 @@ export async function GET(request: NextRequest) {
   }
 
   const { eventId } = parsed.data;
+
+  const now = Date.now();
+  const cachedResponse = occupancyCacheByEvent.get(eventId);
+  if (cachedResponse && cachedResponse.expiresAt > now) {
+    return NextResponse.json(cachedResponse.payload, {
+      headers: {
+        "Cache-Control": "private, no-store",
+      },
+    });
+  }
 
   try {
     const teamsSnapshot = await adminDb
@@ -144,17 +176,21 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    return NextResponse.json(
-      {
-        zones,
-        generatedAt: new Date().toISOString(),
+    const payload: OccupancyResponsePayload = {
+      zones,
+      generatedAt: new Date().toISOString(),
+    };
+
+    occupancyCacheByEvent.set(eventId, {
+      payload,
+      expiresAt: now + OCCUPANCY_CACHE_TTL_MS,
+    });
+
+    return NextResponse.json(payload, {
+      headers: {
+        "Cache-Control": "private, no-store",
       },
-      {
-        headers: {
-          "Cache-Control": "s-maxage=30, stale-while-revalidate=60",
-        },
-      }
-    );
+    });
   } catch (error) {
     return NextResponse.json(
       {

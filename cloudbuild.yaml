@@ -2,7 +2,7 @@ steps:
   - id: 'run-tests'
     name: 'node:22-alpine'
     entrypoint: 'sh'
-    args: ['-c', 'corepack enable pnpm && pnpm install --frozen-lockfile && pnpm typecheck && pnpm test:coverage']
+    args: ['-c', 'corepack enable pnpm && pnpm install --frozen-lockfile && pnpm lint && pnpm typecheck && pnpm test:coverage && pnpm build']
 
   - id: 'build-container'
     name: 'gcr.io/cloud-builders/docker'

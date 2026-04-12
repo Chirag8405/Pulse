@@ -21,6 +21,7 @@ export default defineConfig({
         "node_modules/**",
         "e2e/**",
         "**/*.config.ts",
+        "src/test/**",
         "src/lib/firebase/**",
         "src/constants/teams.ts",
         "src/app/showcase/**",
@@ -30,6 +31,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": resolve(__dirname, "./src"),
+      "server-only": resolve(__dirname, "./src/test/server-only.ts"),
     },
   },
 });
