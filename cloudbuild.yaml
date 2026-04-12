@@ -2,6 +2,16 @@ steps:
   - id: 'run-tests'
     name: 'node:22-alpine'
     entrypoint: 'sh'
+    secretEnv:
+      - 'NEXT_PUBLIC_FIREBASE_API_KEY'
+      - 'NEXT_PUBLIC_GOOGLE_MAPS_API_KEY'
+    env:
+      - 'NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=pulse-492918.firebaseapp.com'
+      - 'NEXT_PUBLIC_FIREBASE_PROJECT_ID=pulse-492918'
+      - 'NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=pulse-492918.firebasestorage.app'
+      - 'NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=48556507973'
+      - 'NEXT_PUBLIC_FIREBASE_APP_ID=1:48556507973:web:96e6aab3568822814a342c'
+      - 'NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=G-FCJ4P2E39X'
     args: ['-c', 'corepack enable pnpm && pnpm install --frozen-lockfile && pnpm lint && pnpm typecheck && pnpm test:coverage && pnpm build']
 
   - id: 'build-container'
@@ -9,11 +19,13 @@ steps:
     entrypoint: 'sh'
     secretEnv:
       - 'NEXT_PUBLIC_FIREBASE_API_KEY'
+      - 'NEXT_PUBLIC_GOOGLE_MAPS_API_KEY'
     args:
       - '-c'
       - |
         docker build \
           --build-arg NEXT_PUBLIC_FIREBASE_API_KEY=$$NEXT_PUBLIC_FIREBASE_API_KEY \
+          --build-arg NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=$$NEXT_PUBLIC_GOOGLE_MAPS_API_KEY \
           --build-arg NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=pulse-492918.firebaseapp.com \
           --build-arg NEXT_PUBLIC_FIREBASE_PROJECT_ID=pulse-492918 \
           --build-arg NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=pulse-492918.firebasestorage.app \
@@ -42,7 +54,7 @@ steps:
       - --cpu=1
       - --min-instances=0
       - --max-instances=10
-      - --set-secrets=NEXT_PUBLIC_FIREBASE_API_KEY=firebase-api-key:latest
+      - --set-secrets=NEXT_PUBLIC_FIREBASE_API_KEY=firebase-api-key:latest,NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=google-maps-api-key:latest
       - --set-env-vars=NODE_ENV=production,NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=pulse-492918.firebaseapp.com,NEXT_PUBLIC_FIREBASE_PROJECT_ID=pulse-492918,NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=pulse-492918.firebasestorage.app,NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=48556507973,NEXT_PUBLIC_FIREBASE_APP_ID=1:48556507973:web:96e6aab3568822814a342c,NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=G-FCJ4P2E39X
 
 images:
@@ -53,3 +65,5 @@ availableSecrets:
   secretManager:
     - versionName: projects/$PROJECT_ID/secrets/firebase-api-key/versions/latest
       env: NEXT_PUBLIC_FIREBASE_API_KEY
+    - versionName: projects/$PROJECT_ID/secrets/google-maps-api-key/versions/latest
+      env: NEXT_PUBLIC_GOOGLE_MAPS_API_KEY

@@ -19,8 +19,22 @@ const NON_PROD_FIREBASE_DEFAULTS: Readonly<Record<string, string>> = {
   NEXT_PUBLIC_FIREBASE_APP_ID: "1:1234567890:web:abcdef123456",
 };
 
-function requireEnvVar(name: string): string {
-  const value = process.env[name];
+// Use static process.env property access so Next.js can embed NEXT_PUBLIC_* values
+// in client bundles. Dynamic indexing (process.env[name]) is not reliably inlined.
+const RAW_FIREBASE_ENV = {
+  NEXT_PUBLIC_FIREBASE_API_KEY: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  NEXT_PUBLIC_FIREBASE_PROJECT_ID: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID:
+    process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  NEXT_PUBLIC_FIREBASE_APP_ID: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+} as const;
+
+type FirebaseEnvKey = keyof typeof RAW_FIREBASE_ENV;
+
+function requireEnvVar(name: FirebaseEnvKey): string {
+  const value = RAW_FIREBASE_ENV[name];
 
   if (value) {
     return value;
