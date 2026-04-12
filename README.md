@@ -2,7 +2,7 @@
 
 > Sports & Entertainment vertical -- Smart Venue Operations
 
-[Cloud Run URL](https://your-cloud-run-url.run.app) | [GitHub Repo](https://github.com/Chirag8405/Pulse)
+[Cloud Run URL](https://pulse-48556507973.asia-south1.run.app/) | [GitHub Repo](https://github.com/Chirag8405/Pulse)
 
 ## Chosen Vertical
 Sports & Entertainment. PULSE is designed for large-scale sporting venues (10,000-80,000 attendees)
