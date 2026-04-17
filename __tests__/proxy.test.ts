@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { describe, expect, it } from "vitest";
-import { proxy } from "@/proxy";
+import { config, proxy } from "@/proxy";
 
 function readCsp(response: Response): string {
   return response.headers.get("Content-Security-Policy") ?? "";
@@ -20,6 +20,11 @@ describe("proxy security headers", () => {
         .split(";")
         .map((part) => part.trim())
         .find((part) => part.startsWith("script-src ")) ?? "";
+    const styleSrc =
+      csp
+        .split(";")
+        .map((part) => part.trim())
+        .find((part) => part.startsWith("style-src ")) ?? "";
 
     expect(response.status).toBe(307);
     expect(response.headers.get("location")).toContain(
@@ -28,6 +33,8 @@ describe("proxy security headers", () => {
     expect(nonce).toMatch(/^[a-f0-9]{32}$/i);
     expect(csp).toContain(`'nonce-${nonce}'`);
     expect(scriptSrc).not.toContain("'unsafe-inline'");
+    expect(styleSrc).toContain(`'nonce-${nonce}'`);
+    expect(styleSrc).not.toContain("'unsafe-inline'");
   });
 
   it("allows protected routes for authenticated users", () => {
@@ -42,5 +49,17 @@ describe("proxy security headers", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("X-Frame-Options")).toBe("DENY");
     expect(response.headers.get("Content-Security-Policy")).toContain("script-src");
+  });
+
+  it("uses matcher exclusions for api and prefetch requests", () => {
+    expect(config.matcher).toEqual([
+      {
+        source: "/((?!api|_next/static|_next/image|favicon.ico).*)",
+        missing: [
+          { type: "header", key: "next-router-prefetch" },
+          { type: "header", key: "purpose", value: "prefetch" },
+        ],
+      },
+    ]);
   });
 });
