@@ -1,7 +1,6 @@
 "use client";
 
 import { type FormEvent, useMemo, useState } from "react";
-import { Timestamp, doc, setDoc, updateDoc } from "firebase/firestore";
 import { toast } from "sonner";
 import { AuthGuard } from "@/components/layout/AuthGuard";
 import { Badge } from "@/components/ui/badge";
@@ -22,10 +21,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { VENUE_CITY, VENUE_NAME } from "@/constants";
+import { useAuth } from "@/hooks/useAuth";
 import { useEventsFeed } from "@/hooks/useAdminRealtime";
+import {
+  createAdminEvent,
+  updateAdminEventStatus,
+} from "@/lib/firebase/adminApi";
 import { logVenueAnalyticsEvent } from "@/lib/firebase/analytics";
-import { eventDoc, eventsCollection } from "@/lib/firebase/collections";
+import { getErrorMessage } from "@/lib/shared/errorUtils";
 import type { Event } from "@/types/firebase";
 
 interface EventFormValues {
@@ -59,6 +62,7 @@ function getStatusBadgeClass(status: Event["status"]): string {
 }
 
 function AdminEventsContent() {
+  const { user } = useAuth();
   const { data: events, loading, error } = useEventsFeed(100);
 
   const [formValues, setFormValues] = useState<EventFormValues>(INITIAL_EVENT_FORM);
@@ -102,27 +106,22 @@ function AdminEventsContent() {
     setIsCreating(true);
 
     try {
-      const eventReference = doc(eventsCollection);
+      if (!user) {
+        toast.error("Authentication expired. Please sign in again.");
+        return;
+      }
 
-      const eventPayload: Event = {
-        id: eventReference.id,
-        venueName: VENUE_NAME,
-        venueCity: VENUE_CITY,
+      await createAdminEvent(user, {
         homeTeam: formValues.homeTeam.trim(),
         awayTeam: formValues.awayTeam.trim(),
-        startTime: Timestamp.fromDate(parsedStart),
-        status: "upcoming",
-        currentChallengeId: null,
+        startTimeIso: parsedStart.toISOString(),
         matchDay: formValues.matchDay.trim(),
-        title: `${formValues.homeTeam.trim()} vs ${formValues.awayTeam.trim()}`,
-      };
+      });
 
-      await setDoc(eventReference, eventPayload);
       toast.success("Event created successfully.");
       setFormValues(INITIAL_EVENT_FORM);
     } catch (createError) {
-      const message = createError instanceof Error ? createError.message : "Could not create event.";
-      toast.error(message);
+      toast.error(getErrorMessage(createError, "Could not create event."));
     } finally {
       setIsCreating(false);
     }
@@ -145,7 +144,13 @@ function AdminEventsContent() {
     setUpdatingEventId(eventItem.id);
 
     try {
-      await updateDoc(eventDoc(eventItem.id), {
+      if (!user) {
+        toast.error("Authentication expired. Please sign in again.");
+        return;
+      }
+
+      await updateAdminEventStatus(user, {
+        eventId: eventItem.id,
         status: nextStatus,
       });
 
@@ -164,8 +169,7 @@ function AdminEventsContent() {
         toast(options.suggestionToast);
       }
     } catch (updateError) {
-      const message = updateError instanceof Error ? updateError.message : "Could not update event status.";
-      toast.error(message);
+      toast.error(getErrorMessage(updateError, "Could not update event status."));
     } finally {
       setUpdatingEventId(null);
     }

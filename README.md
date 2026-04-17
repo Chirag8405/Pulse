@@ -62,6 +62,7 @@ Step by step:
 | Database | Firebase Firestore |
 | Auth | Firebase Authentication (Google + Anonymous) |
 | Maps | Google Maps Platform + Visualization |
+| Analytics Warehouse | Google BigQuery (audit event sink) |
 | Deployment | Docker + Google Cloud Run + Cloud Build |
 
 ## Local Setup
@@ -81,14 +82,20 @@ Step by step:
    `gcloud auth login`
    `gcloud config set project YOUR_PROJECT_ID`
 2. Enable required services:
-   `gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com`
-3. Create required secret (example):
+   `gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com bigquery.googleapis.com`
+3. Grant BigQuery write access to the Cloud Run service account:
+   `gcloud projects add-iam-policy-binding YOUR_PROJECT_ID --member="serviceAccount:PROJECT_NUMBER-compute@developer.gserviceaccount.com" --role="roles/bigquery.dataEditor"`
+4. Create required secrets:
    `echo -n "YOUR_FIREBASE_API_KEY" | gcloud secrets create firebase-api-key --data-file=-`
-4. Build and deploy with Cloud Build pipeline:
-   `gcloud builds submit --config cloudbuild.yaml .`
-5. Direct deploy (alternative):
+   `echo -n "YOUR_GOOGLE_MAPS_API_KEY" | gcloud secrets create google-maps-api-key --data-file=-`
+5. Create BigQuery dataset and table for audit analytics:
+   `bq mk --location=asia-south1 --dataset YOUR_PROJECT_ID:pulse_analytics`
+   `bq mk --table YOUR_PROJECT_ID:pulse_analytics.audit_events action:STRING,actor_uid:STRING,target_id:STRING,metadata:STRING,occurred_at:TIMESTAMP,ip_address:STRING,ingested_at:TIMESTAMP`
+6. Build and deploy with Cloud Build pipeline:
+   `COMMIT_SHA="$(git rev-parse --short HEAD)-$(date +%Y%m%d%H%M%S)" && gcloud builds submit --config cloudbuild.yaml --substitutions=COMMIT_SHA="$COMMIT_SHA" .`
+7. Direct deploy helper (alternative):
    `./scripts/deploy.sh`
-6. Fetch service URL:
+8. Fetch service URL:
    `gcloud run services describe pulse --region asia-south1 --format='value(status.url)'`
 
 ## Google Services Used
@@ -98,8 +105,18 @@ Step by step:
 | Firebase Firestore | Real-time challenge data, team locations, leaderboard |
 | Firebase Analytics | Event tracking (challenge created/completed, event started) |
 | Google Maps Platform | Satellite heatmap of crowd density across venue zones |
+| Google BigQuery | Audit trail export for team joins, account lifecycle, and admin actions |
 | Google Cloud Run | Production deployment (asia-south1) |
 | Google Cloud Build | CI/CD pipeline: test -> build -> deploy |
+
+## BigQuery Audit Pipeline
+- Audit events are written to both Firestore (`audit_log`) and BigQuery (`pulse_analytics.audit_events`).
+- BigQuery writes are non-blocking and do not break API responses on failure.
+- Runtime config:
+   - `ENABLE_BIGQUERY_AUDIT=true`
+   - `GOOGLE_BIGQUERY_DATASET=pulse_analytics`
+   - `GOOGLE_BIGQUERY_AUDIT_TABLE=audit_events`
+   - `ENABLE_DISTRIBUTED_RATE_LIMIT=true` (Firestore-backed cross-instance throttling)
 
 ## License
 MIT

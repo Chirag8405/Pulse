@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
-import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { adminDb } from "@/lib/firebase/admin";
 import { apiLogger } from "@/lib/google/logging";
+import { internalApiErrorResponse } from "@/lib/server/apiResponses";
 import { logAuditEvent } from "@/lib/server/auditLog";
-import { checkRateLimit, rateLimitHeaders } from "@/lib/server/rateLimit";
-import { getBearerToken } from "@/lib/shared/authUtils";
+import { rateLimitHeaders } from "@/lib/server/rateLimit";
+import { checkServerRateLimit } from "@/lib/server/rateLimitServer";
+import { verifyBearerToken } from "@/lib/server/requestAuth";
 
 interface TeamJoinPayload {
   teamId?: unknown;
@@ -13,6 +15,9 @@ interface TeamJoinPayload {
 interface UserJoinDoc {
   teamId?: unknown;
 }
+
+const TEAM_JOIN_USER_NOT_FOUND = "TEAM_JOIN_USER_NOT_FOUND";
+const TEAM_JOIN_TEAM_NOT_FOUND = "TEAM_JOIN_TEAM_NOT_FOUND";
 
 function parseTeamId(payload: TeamJoinPayload | null): string | null {
   if (!payload || typeof payload.teamId !== "string") {
@@ -25,10 +30,10 @@ function parseTeamId(payload: TeamJoinPayload | null): string | null {
 }
 
 export async function POST(request: NextRequest) {
-  const token = getBearerToken(request);
+  const authResult = await verifyBearerToken(request);
 
-  if (!token) {
-    return NextResponse.json({ error: "Missing bearer token" }, { status: 401 });
+  if (!authResult.ok || !authResult.uid) {
+    return authResult.response!;
   }
 
   const payload = (await request.json().catch(() => null)) as TeamJoinPayload | null;
@@ -39,10 +44,9 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const decodedToken = await adminAuth.verifyIdToken(token);
-    const uid = decodedToken.uid;
+    const uid = authResult.uid;
 
-    const rateCheck = checkRateLimit(`team-join:${uid}`, 10, 60_000);
+    const rateCheck = await checkServerRateLimit(`team-join:${uid}`, 10, 60_000);
     if (!rateCheck.allowed) {
       return NextResponse.json(
         { error: "Too many requests" },
@@ -60,11 +64,11 @@ export async function POST(request: NextRequest) {
       ]);
 
       if (!userSnapshot.exists) {
-        throw new Error("User document not found");
+        throw new Error(TEAM_JOIN_USER_NOT_FOUND);
       }
 
       if (!teamSnapshot.exists) {
-        throw new Error("Team document not found");
+        throw new Error(TEAM_JOIN_TEAM_NOT_FOUND);
       }
 
       const userData = userSnapshot.data() as UserJoinDoc;
@@ -95,8 +99,21 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, teamId });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Could not join team";
+    if (error instanceof Error && error.message === TEAM_JOIN_USER_NOT_FOUND) {
+      return NextResponse.json(
+        { error: "User account not found" },
+        { status: 404 }
+      );
+    }
 
-    return NextResponse.json({ error: message }, { status: 400 });
+    if (error instanceof Error && error.message === TEAM_JOIN_TEAM_NOT_FOUND) {
+      return NextResponse.json({ error: "Team not found" }, { status: 404 });
+    }
+
+    return internalApiErrorResponse(
+      "Could not join team. Please try again.",
+      error,
+      "Team join API failed"
+    );
   }
 }

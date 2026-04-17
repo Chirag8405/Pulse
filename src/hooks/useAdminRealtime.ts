@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  collectionGroup,
   limit,
   onSnapshot,
   orderBy,
@@ -15,7 +14,6 @@ import {
   eventsCollection,
   teamsCollection,
 } from "@/lib/firebase/collections";
-import { db } from "@/lib/firebase/config";
 import {
   fetchChallengesFeed as fetchChallengesFeedFromApi,
   fetchEventsFeed as fetchEventsFeedFromApi,
@@ -376,87 +374,29 @@ export function useZoneOccupancy(): FeedResult<ZoneOccupancyData> {
     resolved: false,
   });
 
-  const handleSnapshot = useCallback(
-    (snapshot: { docs: Array<{ data: () => { zoneId?: string } }> }) => {
-      const nextZoneCounts = buildEmptyZoneCounts();
-
-      snapshot.docs.forEach((docSnapshot) => {
-        const location = docSnapshot.data() as { zoneId?: string };
-        const zoneId = location.zoneId;
-
-        if (!zoneId || !Object.hasOwn(nextZoneCounts, zoneId)) {
-          return;
-        }
-
-        nextZoneCounts[zoneId] = (nextZoneCounts[zoneId] ?? 0) + 1;
-      });
-
-      const totalActiveMembers = Object.values(nextZoneCounts).reduce(
-        (sum, count) => sum + count,
-        0
-      );
-
-      setState({
-        data: {
-          byZone: nextZoneCounts,
-          totalActiveMembers,
-          updatedAtMillis: Date.now(),
-        },
-        error: null,
-        resolved: true,
-      });
-    },
-    []
-  );
-
-  const handleSnapshotError = useCallback((snapshotError: unknown) => {
-    setState((currentState) => ({
-      data: currentState.data,
-      error: getRealtimeErrorMessage(snapshotError),
-      resolved: true,
-    }));
-  }, []);
-
   useEffect(() => {
-    if (!shouldUseRealtimeListeners) {
-      return startPolling("useZoneOccupancy", async () => {
-        try {
-          const occupancy = await fetchZoneOccupancyFromApi();
+    return startPolling("useZoneOccupancy", async () => {
+      try {
+        const occupancy = await fetchZoneOccupancyFromApi();
 
-          setState({
-            data: {
-              byZone: occupancy.byZone,
-              totalActiveMembers: occupancy.totalActiveMembers,
-              updatedAtMillis: occupancy.updatedAtMillis,
-            },
-            error: null,
-            resolved: true,
-          });
-        } catch (error) {
-          setState((currentState) => ({
-            data: currentState.data,
-            error: getRealtimeErrorMessage(error),
-            resolved: true,
-          }));
-        }
-      });
-    }
-
-    const occupancyQuery = query(
-      collectionGroup(db, "memberLocations"),
-      where("isActive", "==", true)
-    );
-
-    const unsubscribe = onSnapshot(
-      occupancyQuery,
-      handleSnapshot,
-      handleSnapshotError
-    );
-
-    return () => {
-      safeUnsubscribe(unsubscribe, "useZoneOccupancy");
-    };
-  }, [handleSnapshot, handleSnapshotError]);
+        setState({
+          data: {
+            byZone: occupancy.byZone,
+            totalActiveMembers: occupancy.totalActiveMembers,
+            updatedAtMillis: occupancy.updatedAtMillis,
+          },
+          error: null,
+          resolved: true,
+        });
+      } catch (error) {
+        setState((currentState) => ({
+          data: currentState.data,
+          error: getRealtimeErrorMessage(error),
+          resolved: true,
+        }));
+      }
+    });
+  }, []);
 
   const stableData = useMemo(() => state.data, [state.data]);
 

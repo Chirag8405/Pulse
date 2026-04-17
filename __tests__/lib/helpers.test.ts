@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => {
   return {
@@ -12,6 +12,11 @@ const mocks = vi.hoisted(() => {
     memberLocationDoc: vi.fn(
       (teamId: string, userId: string) => `member-location:${teamId}:${userId}`
     ),
+    auth: {
+      currentUser: null as null | {
+        getIdToken: (forceRefresh?: boolean) => Promise<string>;
+      },
+    },
   };
 });
 
@@ -44,6 +49,7 @@ vi.mock("@/lib/firebase/collections", () => ({
 
 vi.mock("@/lib/firebase/config", () => ({
   db: { id: "mock-db" },
+  auth: mocks.auth,
 }));
 
 import {
@@ -53,6 +59,11 @@ import {
 } from "@/lib/firebase/helpers";
 
 describe("firebase helpers", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.auth.currentUser = null;
+  });
+
   it("getUserById returns null for non-existent document", async () => {
     mocks.getDoc.mockResolvedValue({
       exists: () => false,
@@ -111,6 +122,33 @@ describe("firebase helpers", () => {
     await expect(
       updateUserLocation("uid", "team-id", "invalid-zone")
     ).rejects.toThrow();
+  });
+
+  it("updateUserLocation uses API route for authenticated user", async () => {
+    const getIdToken = vi.fn().mockResolvedValue("token-123");
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({ success: true }),
+    });
+
+    mocks.auth.currentUser = { getIdToken };
+    vi.stubGlobal("fetch", fetchMock);
+
+    await updateUserLocation("uid", "team-id", "zone-east");
+
+    expect(getIdToken).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/location/update",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          Authorization: "Bearer token-123",
+        }),
+      })
+    );
+    expect(mocks.setDoc).not.toHaveBeenCalled();
+
+    vi.unstubAllGlobals();
   });
 
   it("joinTeam uses a Firestore write batch", async () => {

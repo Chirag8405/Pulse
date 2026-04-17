@@ -32,6 +32,7 @@ vi.mock("@/lib/firebase/admin", () => ({
 import {
   getBearerToken,
   readIsAdmin,
+  verifyAdminBearerToken,
   verifyBearerToken,
 } from "@/lib/server/requestAuth";
 
@@ -95,6 +96,34 @@ describe("requestAuth", () => {
     expect(await result.response?.json()).toEqual({
       error: "Invalid bearer token",
     });
+  });
+
+  it("verifyAdminBearerToken returns 403 for non-admin users", async () => {
+    verifyIdTokenMock.mockResolvedValue({ uid: "user-non-admin" });
+    getMock.mockResolvedValue({
+      exists: true,
+      data: () => ({ isAdmin: false }),
+    });
+
+    const result = await verifyAdminBearerToken(createRequest("Bearer token-123"));
+
+    expect(result.ok).toBe(false);
+    expect(result.response?.status).toBe(403);
+    expect(await result.response?.json()).toEqual({
+      error: "Admin access required",
+    });
+  });
+
+  it("verifyAdminBearerToken returns uid for admins", async () => {
+    verifyIdTokenMock.mockResolvedValue({ uid: "admin-1" });
+    getMock.mockResolvedValue({
+      exists: true,
+      data: () => ({ isAdmin: true }),
+    });
+
+    const result = await verifyAdminBearerToken(createRequest("Bearer good-token"));
+
+    expect(result).toEqual({ ok: true, uid: "admin-1" });
   });
 
   it("readIsAdmin returns true for admin-like values", async () => {

@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { VENUE_NAME } from "@/constants";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { apiLogger } from "@/lib/google/logging";
+import { internalApiErrorResponse } from "@/lib/server/apiResponses";
 import { logAuditEvent } from "@/lib/server/auditLog";
-import { checkRateLimit, rateLimitHeaders } from "@/lib/server/rateLimit";
+import { rateLimitHeaders } from "@/lib/server/rateLimit";
+import { checkServerRateLimit } from "@/lib/server/rateLimitServer";
 import { getBearerToken, isAdminLikeValue } from "@/lib/shared/authUtils";
 
 interface UserBootstrapDoc {
@@ -134,8 +136,26 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Missing bearer token" }, { status: 401 });
   }
 
+  let decodedToken: {
+    uid: string;
+    email?: string;
+    name?: string;
+    picture?: string;
+    [key: string]: unknown;
+  };
+
   try {
-    const rateCheck = checkRateLimit(`bootstrap:${token.slice(-8)}`, 30, 60_000);
+    decodedToken = await adminAuth.verifyIdToken(token);
+  } catch {
+    return NextResponse.json({ error: "Invalid bearer token" }, { status: 401 });
+  }
+
+  try {
+    const rateCheck = await checkServerRateLimit(
+      `bootstrap:${decodedToken.uid}`,
+      30,
+      60_000
+    );
     if (!rateCheck.allowed) {
       return NextResponse.json(
         { error: "Too many requests" },
@@ -143,7 +163,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const decodedToken = await adminAuth.verifyIdToken(token);
     const uid = decodedToken.uid;
     const normalizedEmail = (decodedToken.email ?? "").trim().toLowerCase();
     const allowlistedAdmin = normalizedEmail.length > 0 && ADMIN_EMAILS.has(normalizedEmail);
@@ -168,18 +187,15 @@ export async function POST(request: NextRequest) {
       };
 
       if (process.env.NODE_ENV === "development") {
-        console.log(
-          "[bootstrap] existing user admin resolution",
-          {
-            uid,
-            email: normalizedEmail || null,
-            existingAdmin,
-            allowlistedAdmin,
-            claimAdmin,
-            shouldPromoteToAdmin,
-            resolvedIsAdmin,
-          }
-        );
+        apiLogger.debug("Bootstrap existing user admin resolution", {
+          uid,
+          email: normalizedEmail || null,
+          existingAdmin,
+          allowlistedAdmin,
+          claimAdmin,
+          shouldPromoteToAdmin,
+          resolvedIsAdmin,
+        });
       }
 
       await userReference.set(safeProfilePayload, { merge: true });
@@ -230,18 +246,15 @@ export async function POST(request: NextRequest) {
     };
 
     if (process.env.NODE_ENV === "development") {
-      console.log(
-        "[bootstrap] new user admin resolution",
-        {
-          uid,
-          email: normalizedEmail || null,
-          existingAdmin,
-          allowlistedAdmin,
-          claimAdmin,
-          firstUserAdmin,
-          resolvedIsAdmin: newUserPayload.isAdmin,
-        }
-      );
+      apiLogger.debug("Bootstrap new user admin resolution", {
+        uid,
+        email: normalizedEmail || null,
+        existingAdmin,
+        allowlistedAdmin,
+        claimAdmin,
+        firstUserAdmin,
+        resolvedIsAdmin: newUserPayload.isAdmin,
+      });
     }
 
     await userReference.set(newUserPayload, { merge: true });
@@ -257,8 +270,10 @@ export async function POST(request: NextRequest) {
       teamId: newUserPayload.teamId,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Authentication failed";
-
-    return NextResponse.json({ error: message }, { status: 401 });
+    return internalApiErrorResponse(
+      "Failed to bootstrap user",
+      error,
+      "Bootstrap user API failed"
+    );
   }
 }

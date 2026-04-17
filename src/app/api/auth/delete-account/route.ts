@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { apiLogger } from "@/lib/google/logging";
+import { internalApiErrorResponse } from "@/lib/server/apiResponses";
 import { logAuditEvent } from "@/lib/server/auditLog";
-import { checkRateLimit, rateLimitHeaders } from "@/lib/server/rateLimit";
-import { getBearerToken } from "@/lib/shared/authUtils";
+import { rateLimitHeaders } from "@/lib/server/rateLimit";
+import { checkServerRateLimit } from "@/lib/server/rateLimitServer";
+import { verifyBearerToken } from "@/lib/server/requestAuth";
 
 interface UserDeleteDoc {
   teamId?: unknown;
@@ -25,17 +27,16 @@ function isFirebaseUserNotFoundError(error: unknown): boolean {
 }
 
 export async function DELETE(request: NextRequest) {
-  const token = getBearerToken(request);
+  const authResult = await verifyBearerToken(request);
 
-  if (!token) {
-    return NextResponse.json({ error: "Missing bearer token" }, { status: 401 });
+  if (!authResult.ok || !authResult.uid) {
+    return authResult.response!;
   }
 
   try {
-    const decodedToken = await adminAuth.verifyIdToken(token);
-    const uid = decodedToken.uid;
+    const uid = authResult.uid;
 
-    const rateCheck = checkRateLimit(`delete:${uid}`, 3, 60_000);
+    const rateCheck = await checkServerRateLimit(`delete:${uid}`, 3, 60_000);
     if (!rateCheck.allowed) {
       return NextResponse.json(
         { error: "Too many requests" },
@@ -80,8 +81,10 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: true });
     }
 
-    const message = error instanceof Error ? error.message : "Failed to delete account";
-
-    return NextResponse.json({ error: message }, { status: 400 });
+    return internalApiErrorResponse(
+      "Failed to delete account",
+      error,
+      "Delete account API failed"
+    );
   }
 }

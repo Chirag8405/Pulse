@@ -3,12 +3,28 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const verifyBearerTokenMock = vi.hoisted(() => vi.fn());
 const readIsAdminMock = vi.hoisted(() => vi.fn());
+const checkServerRateLimitMock = vi.hoisted(() => vi.fn());
+const resolveActiveEventIdMock = vi.hoisted(() => vi.fn());
+const readEventZoneOccupancySummaryMock = vi.hoisted(() => vi.fn());
+const refreshEventZoneOccupancySummaryMock = vi.hoisted(() => vi.fn());
+const buildEmptyZoneCountsMock = vi.hoisted(() => vi.fn(() => ({ "zone-east": 0 })));
 const collectionMock = vi.hoisted(() => vi.fn());
 const collectionGroupMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/server/requestAuth", () => ({
   verifyBearerToken: verifyBearerTokenMock,
   readIsAdmin: readIsAdminMock,
+}));
+
+vi.mock("@/lib/server/rateLimitServer", () => ({
+  checkServerRateLimit: checkServerRateLimitMock,
+}));
+
+vi.mock("@/lib/server/zoneOccupancy", () => ({
+  resolveActiveEventId: resolveActiveEventIdMock,
+  readEventZoneOccupancySummary: readEventZoneOccupancySummaryMock,
+  refreshEventZoneOccupancySummary: refreshEventZoneOccupancySummaryMock,
+  buildEmptyZoneCounts: buildEmptyZoneCountsMock,
 }));
 
 vi.mock("@/lib/firebase/admin", () => ({
@@ -36,6 +52,18 @@ describe("GET /api/realtime", () => {
 
     verifyBearerTokenMock.mockResolvedValue({ ok: true, uid: "user-1" });
     readIsAdminMock.mockResolvedValue(true);
+    checkServerRateLimitMock.mockResolvedValue({
+      allowed: true,
+      remaining: 100,
+      resetAt: Date.now() + 60_000,
+    });
+    resolveActiveEventIdMock.mockResolvedValue(null);
+    readEventZoneOccupancySummaryMock.mockResolvedValue(null);
+    refreshEventZoneOccupancySummaryMock.mockResolvedValue({
+      byZone: { "zone-east": 1 },
+      totalActiveMembers: 1,
+      updatedAtMillis: Date.now(),
+    });
 
     const mockSnapshot = {
       docs: [
@@ -112,5 +140,21 @@ describe("GET /api/realtime", () => {
   it("returns 400 for challengeTeamProgress without challengeId", async () => {
     const response = await GET(createRequest({ resource: "challengeTeamProgress" }));
     expect(response.status).toBe(400);
+  });
+
+  it("returns zone occupancy using helper when requested", async () => {
+    resolveActiveEventIdMock.mockResolvedValue("event-1");
+    readEventZoneOccupancySummaryMock.mockResolvedValue({
+      byZone: { "zone-east": 2, "zone-west": 1 },
+      totalActiveMembers: 3,
+      updatedAtMillis: Date.now(),
+    });
+
+    const response = await GET(createRequest({ resource: "zoneOccupancy" }));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.data.totalActiveMembers).toBe(3);
+    expect(body.data.byZone["zone-east"]).toBe(2);
   });
 });

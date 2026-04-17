@@ -24,7 +24,7 @@ import {
   teamProgressDoc,
   userDoc,
 } from "@/lib/firebase/collections";
-import { db } from "@/lib/firebase/config";
+import { auth, db } from "@/lib/firebase/config";
 import { LocationUpdateSchema } from "@/lib/schemas";
 import { isAdminLikeValue } from "@/lib/shared/authUtils";
 import type {
@@ -330,6 +330,29 @@ export async function updateUserLocation(
     zoneId,
     timestamp: Date.now(),
   });
+
+  if (typeof window !== "undefined" && auth?.currentUser) {
+    const token = await auth.currentUser.getIdToken();
+    const response = await fetch("/api/location/update", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      cache: "no-store",
+      body: JSON.stringify({ zoneId: parsedLocation.zoneId }),
+    });
+
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as
+        | { error?: string }
+        | null;
+
+      throw new Error(payload?.error ?? "Could not update location.");
+    }
+
+    return;
+  }
 
   await setDoc(
     memberLocationDoc(teamId, userId),

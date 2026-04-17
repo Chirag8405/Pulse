@@ -56,6 +56,30 @@ export async function verifyBearerToken(
   }
 }
 
+export async function verifyAdminBearerToken(
+  request: NextRequest
+): Promise<VerifyRequestResult> {
+  const authResult = await verifyBearerToken(request);
+
+  if (!authResult.ok || !authResult.uid) {
+    return authResult;
+  }
+
+  const isAdmin = await readIsAdmin(authResult.uid);
+
+  if (!isAdmin) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: "Admin access required" },
+        { status: 403 }
+      ),
+    };
+  }
+
+  return authResult;
+}
+
 export async function readIsAdmin(uid: string): Promise<boolean> {
   try {
     const userSnapshot = await adminDb.collection("users").doc(uid).get();

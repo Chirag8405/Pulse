@@ -1,15 +1,7 @@
 "use client";
 
 import { Fragment, type FormEvent, useMemo, useState } from "react";
-import {
-  Timestamp,
-  addDoc,
-  collection,
-  doc,
-  serverTimestamp,
-  setDoc,
-  updateDoc,
-} from "firebase/firestore";
+import { Timestamp } from "firebase/firestore";
 import { Bot, RefreshCcw, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { AuthGuard } from "@/components/layout/AuthGuard";
@@ -58,15 +50,15 @@ import {
 } from "@/hooks/useAdminRealtime";
 import { useAuth } from "@/hooks/useAuth";
 import { useLeaderboard } from "@/hooks/useLeaderboard";
-import { logVenueAnalyticsEvent } from "@/lib/firebase/analytics";
 import {
-  auditLogCollection,
-  challengeDoc,
-  eventDoc,
-} from "@/lib/firebase/collections";
-import { db } from "@/lib/firebase/config";
+  completeAdminChallenge,
+  createAdminChallenge,
+  setAdminChallengeLive,
+} from "@/lib/firebase/adminApi";
+import { logVenueAnalyticsEvent } from "@/lib/firebase/analytics";
 import { recommendChallengeParams } from "@/lib/recommender/challengeRecommender";
 import { AdminChallengeSchema } from "@/lib/schemas";
+import { getErrorMessage } from "@/lib/shared/errorUtils";
 import type { Challenge } from "@/types/firebase";
 
 interface ChallengeFormValues {
@@ -114,7 +106,7 @@ function mapIssueToField(fieldPath: string): keyof ChallengeFormValues | null {
 }
 
 function AdminChallengesContent() {
-  const { firestoreUser } = useAuth();
+  const { user, firestoreUser } = useAuth();
 
   const { data: activeEvent, loading: activeEventLoading } = useActiveEvent();
   const { data: activeChallenge, loading: activeChallengeLoading } = useActiveChallenge(
@@ -268,50 +260,34 @@ function AdminChallengesContent() {
       return;
     }
 
+    if (!user) {
+      toast.error("Authentication expired. Please sign in again.");
+      return;
+    }
+
     setIsSubmitting(true);
     setFormErrors({});
 
     try {
-      const challengeReference = doc(collection(db, "challenges"));
-
-      await setDoc(challengeReference, {
-        id: challengeReference.id,
+      const createdChallenge = await createAdminChallenge(user, {
         eventId: activeEvent.id,
         title: parsed.data.title,
         description: parsed.data.description,
         targetSpreadPercentage: parsed.data.targetSpreadPercentage,
         targetZoneCount: parsed.data.targetZoneCount,
         durationMinutes: parsed.data.durationMinutes,
-        startTime: serverTimestamp(),
-        endTime: Timestamp.fromMillis(
-          Date.now() + parsed.data.durationMinutes * 60_000
-        ),
-        status: "pending",
-        reward: {
-          type: parsed.data.rewardType,
-          description: parsed.data.rewardDescription,
-          unlockedAt: null,
-        },
-        participatingTeamIds: [],
-        createdBy: firestoreUser?.uid ?? null,
-      });
-
-      await addDoc(auditLogCollection, {
-        action: "challenge_created",
-        adminUid: firestoreUser?.uid ?? "unknown",
-        timestamp: serverTimestamp(),
-        challengeId: challengeReference.id,
+        rewardType: parsed.data.rewardType,
+        rewardDescription: parsed.data.rewardDescription,
       });
 
       logVenueAnalyticsEvent("challenge_created", {
-        challengeId: challengeReference.id,
+        challengeId: createdChallenge.id,
       });
 
       toast.success("Challenge created. Set it live when ready.");
       setFormValues(INITIAL_FORM_VALUES);
     } catch (createError) {
-      const message = createError instanceof Error ? createError.message : "Challenge creation failed.";
-      toast.error(message);
+      toast.error(getErrorMessage(createError, "Challenge creation failed."));
     } finally {
       setIsSubmitting(false);
     }
@@ -323,25 +299,28 @@ function AdminChallengesContent() {
       return;
     }
 
+    if (!activeEvent) {
+      toast.error("No active event found.");
+      return;
+    }
+
+    if (!user) {
+      toast.error("Authentication expired. Please sign in again.");
+      return;
+    }
+
     setIsSettingLiveId(challenge.id);
 
     try {
-      await updateDoc(challengeDoc(challenge.id), {
-        status: "active",
-        startTime: serverTimestamp(),
-        endTime: Timestamp.fromMillis(Date.now() + challenge.durationMinutes * 60_000),
+      await setAdminChallengeLive(user, {
+        challengeId: challenge.id,
+        eventId: activeEvent.id,
+        durationMinutes: challenge.durationMinutes,
       });
-
-      if (activeEvent) {
-        await updateDoc(eventDoc(activeEvent.id), {
-          currentChallengeId: challenge.id,
-        });
-      }
 
       toast.success("Challenge is now live.");
     } catch (setLiveError) {
-      const message = setLiveError instanceof Error ? setLiveError.message : "Could not set challenge live.";
-      toast.error(message);
+      toast.error(getErrorMessage(setLiveError, "Could not set challenge live."));
     } finally {
       setIsSettingLiveId(null);
     }
@@ -352,12 +331,16 @@ function AdminChallengesContent() {
       return;
     }
 
+    if (!user) {
+      toast.error("Authentication expired. Please sign in again.");
+      return;
+    }
+
     setIsEndingChallenge(true);
 
     try {
-      await updateDoc(challengeDoc(activeChallenge.id), {
-        status: "completed",
-        endTime: Timestamp.now(),
+      await completeAdminChallenge(user, {
+        challengeId: activeChallenge.id,
       });
 
       logVenueAnalyticsEvent("challenge_completed", {
@@ -369,8 +352,7 @@ function AdminChallengesContent() {
       toast.success("Challenge ended early.");
       setConfirmEndOpen(false);
     } catch (endError) {
-      const message = endError instanceof Error ? endError.message : "Failed to end challenge.";
-      toast.error(message);
+      toast.error(getErrorMessage(endError, "Failed to end challenge."));
     } finally {
       setIsEndingChallenge(false);
     }

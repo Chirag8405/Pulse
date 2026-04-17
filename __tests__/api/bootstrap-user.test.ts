@@ -52,7 +52,7 @@ describe("POST /api/auth/bootstrap-user", () => {
     const body = await response.json();
 
     expect(response.status).toBe(401);
-    expect(body.error).toBe("invalid token");
+    expect(body.error).toBe("Invalid bearer token");
   });
 
   it("returns isAdmin and teamId for existing user", async () => {

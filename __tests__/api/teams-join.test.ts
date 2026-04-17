@@ -73,14 +73,14 @@ describe("POST /api/teams/join", () => {
     expect(body.teamId).toBe("team-1");
   });
 
-  it("returns 400 when transaction fails", async () => {
+  it("returns 404 when team is missing", async () => {
     verifyIdTokenMock.mockResolvedValue({ uid: "user-1" });
-    runTransactionMock.mockRejectedValue(new Error("Team document not found"));
+    runTransactionMock.mockRejectedValue(new Error("TEAM_JOIN_TEAM_NOT_FOUND"));
 
     const response = await POST(createRequest({ teamId: "bad-team" }, "valid-token"));
     const body = await response.json();
 
-    expect(response.status).toBe(400);
-    expect(body.error).toBe("Team document not found");
+    expect(response.status).toBe(404);
+    expect(body.error).toBe("Team not found");
   });
 });

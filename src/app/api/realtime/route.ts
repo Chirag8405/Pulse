@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { ZONES } from "@/constants";
 import { adminDb } from "@/lib/firebase/admin";
-import { checkRateLimit, rateLimitHeaders } from "@/lib/server/rateLimit";
+import { internalApiErrorResponse } from "@/lib/server/apiResponses";
+import { rateLimitHeaders } from "@/lib/server/rateLimit";
+import { checkServerRateLimit } from "@/lib/server/rateLimitServer";
 import { readIsAdmin, verifyBearerToken } from "@/lib/server/requestAuth";
+import {
+  buildEmptyZoneCounts,
+  readEventZoneOccupancySummary,
+  refreshEventZoneOccupancySummary,
+  resolveActiveEventId,
+} from "@/lib/server/zoneOccupancy";
 
 export const dynamic = "force-dynamic";
 
@@ -26,8 +33,11 @@ const QuerySchema = z.object({
 
 const ZONE_OCCUPANCY_CACHE_TTL_MS = 15_000;
 let zoneOccupancyCache: {
+  eventId: string | null;
   expiresAt: number;
   byZone: Record<string, number>;
+  totalActiveMembers: number;
+  updatedAtMillis: number;
 } | null = null;
 
 function timestampToMillis(value: unknown): number {
@@ -227,73 +237,62 @@ async function getChallengesSnapshot(limitCount: number) {
   }
 }
 
-async function getZoneOccupancyCounts(): Promise<Record<string, number>> {
+async function getZoneOccupancySnapshot(): Promise<{
+  byZone: Record<string, number>;
+  totalActiveMembers: number;
+  updatedAtMillis: number;
+}> {
   const now = Date.now();
   if (zoneOccupancyCache && zoneOccupancyCache.expiresAt > now) {
-    return { ...zoneOccupancyCache.byZone };
+    return {
+      byZone: { ...zoneOccupancyCache.byZone },
+      totalActiveMembers: zoneOccupancyCache.totalActiveMembers,
+      updatedAtMillis: zoneOccupancyCache.updatedAtMillis,
+    };
   }
 
-  const byZone = ZONES.reduce<Record<string, number>>((acc, zone) => {
-    acc[zone.id] = 0;
-    return acc;
-  }, {});
+  const activeEventId = await resolveActiveEventId();
 
-  try {
-    const occupancySnapshot = await adminDb
-      .collectionGroup("memberLocations")
-      .where("isActive", "==", true)
-      .get();
-
-    occupancySnapshot.docs.forEach((docSnapshot) => {
-      const data = docSnapshot.data() as Record<string, unknown>;
-      const zoneId = toStringValue(data.zoneId);
-
-      if (!zoneId || !Object.hasOwn(byZone, zoneId)) {
-        return;
-      }
-
-      byZone[zoneId] = (byZone[zoneId] ?? 0) + 1;
-    });
-
+  if (!activeEventId) {
+    const emptyCounts = buildEmptyZoneCounts();
     zoneOccupancyCache = {
-      byZone: { ...byZone },
+      eventId: null,
+      byZone: emptyCounts,
+      totalActiveMembers: 0,
+      updatedAtMillis: now,
       expiresAt: now + ZONE_OCCUPANCY_CACHE_TTL_MS,
     };
 
-    return byZone;
-  } catch {
-    const teamsSnapshot = await adminDb.collection("teams").get();
-
-    const locationSnapshots = await Promise.all(
-      teamsSnapshot.docs.map((teamDocSnapshot) =>
-        teamDocSnapshot.ref
-          .collection("memberLocations")
-          .where("isActive", "==", true)
-          .get()
-      )
-    );
-
-    locationSnapshots.forEach((snapshot) => {
-      snapshot.docs.forEach((docSnapshot) => {
-        const data = docSnapshot.data() as Record<string, unknown>;
-
-        const zoneId = toStringValue(data.zoneId);
-
-        if (!zoneId || !Object.hasOwn(byZone, zoneId)) {
-          return;
-        }
-
-        byZone[zoneId] = (byZone[zoneId] ?? 0) + 1;
-      });
-    });
-
-    zoneOccupancyCache = {
-      byZone: { ...byZone },
-      expiresAt: now + ZONE_OCCUPANCY_CACHE_TTL_MS,
+    return {
+      byZone: emptyCounts,
+      totalActiveMembers: 0,
+      updatedAtMillis: now,
     };
-
-    return byZone;
   }
+
+  let summary = await readEventZoneOccupancySummary(activeEventId);
+  const isStaleSummary =
+    summary && summary.updatedAtMillis > 0
+      ? now - summary.updatedAtMillis > 2 * 60_000
+      : true;
+
+  if (!summary || isStaleSummary) {
+    summary = await refreshEventZoneOccupancySummary(activeEventId);
+  }
+
+  zoneOccupancyCache = {
+    eventId: activeEventId,
+    byZone: { ...summary.byZone },
+    totalActiveMembers: summary.totalActiveMembers,
+    updatedAtMillis: summary.updatedAtMillis || now,
+    expiresAt: now + ZONE_OCCUPANCY_CACHE_TTL_MS,
+  };
+
+  return {
+    byZone: { ...summary.byZone },
+    totalActiveMembers: summary.totalActiveMembers,
+    updatedAtMillis: summary.updatedAtMillis || now,
+  };
 }
 
 export async function GET(request: NextRequest) {
@@ -302,7 +301,11 @@ export async function GET(request: NextRequest) {
     return authResult.response!;
   }
 
-  const rateCheck = checkRateLimit(`realtime:${authResult.uid}`, 120, 60_000);
+  const rateCheck = await checkServerRateLimit(
+    `realtime:${authResult.uid}`,
+    120,
+    60_000
+  );
   if (!rateCheck.allowed) {
     return NextResponse.json(
       { error: "Too many requests" },
@@ -394,17 +397,12 @@ export async function GET(request: NextRequest) {
     }
 
     if (resource === "zoneOccupancy") {
-      const byZone = await getZoneOccupancyCounts();
-
-      const totalActiveMembers = Object.values(byZone).reduce(
-        (sum, count) => sum + count,
-        0
-      );
+      const occupancy = await getZoneOccupancySnapshot();
 
       return createNoStoreResponse({
-        byZone,
-        totalActiveMembers,
-        updatedAtMillis: Date.now(),
+        byZone: occupancy.byZone,
+        totalActiveMembers: occupancy.totalActiveMembers,
+        updatedAtMillis: occupancy.updatedAtMillis,
       });
     }
 
@@ -430,12 +428,10 @@ export async function GET(request: NextRequest) {
       )
     );
   } catch (error) {
-    return NextResponse.json(
-      {
-        error: "Failed to fetch realtime resource",
-        details: error instanceof Error ? error.message : "unknown_error",
-      },
-      { status: 500 }
+    return internalApiErrorResponse(
+      "Failed to fetch realtime resource",
+      error,
+      "Realtime API failed"
     );
   }
 }

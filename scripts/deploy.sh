@@ -1,13 +1,22 @@
 #!/bin/bash
-set -e
-PROJECT_ID=${GOOGLE_CLOUD_PROJECT:-"your-project-id"}
-IMAGE="gcr.io/$PROJECT_ID/pulse"
-REGION="asia-south1"
-SERVICE="pulse"
-echo "==> Building Docker image..."
-docker build -t "$IMAGE:latest" .
-echo "==> Pushing to Google Container Registry..."
-docker push "$IMAGE:latest"
-echo "==> Deploying to Cloud Run in $REGION..."
-gcloud run deploy "$SERVICE" --image="$IMAGE:latest" --region="$REGION" --platform=managed --allow-unauthenticated --memory=512Mi
-echo "==> Deployment complete!"
+set -euo pipefail
+
+PROJECT_ID=${GOOGLE_CLOUD_PROJECT:-${GCLOUD_PROJECT:-}}
+
+if [[ -z "${PROJECT_ID}" ]]; then
+	echo "ERROR: Set GOOGLE_CLOUD_PROJECT (or GCLOUD_PROJECT) before deploying."
+	exit 1
+fi
+
+COMMIT_SHA=${COMMIT_SHA:-"$(git rev-parse --short HEAD)-$(date +%Y%m%d%H%M%S)"}
+
+echo "==> Submitting Cloud Build for project ${PROJECT_ID}"
+echo "==> Using COMMIT_SHA=${COMMIT_SHA}"
+
+gcloud builds submit \
+	--project "${PROJECT_ID}" \
+	--config cloudbuild.yaml \
+	--substitutions=COMMIT_SHA="${COMMIT_SHA}" \
+	.
+
+echo "==> Deployment pipeline completed."

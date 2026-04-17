@@ -58,9 +58,8 @@ describe("DELETE /api/auth/delete-account", () => {
   it("returns 401 for invalid token", async () => {
     verifyIdTokenMock.mockRejectedValue(new Error("invalid"));
 
-    // The route catches the error and returns 400 for general errors
     const response = await DELETE(createRequest("bad-token"));
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(401);
   });
 
   it("returns success when user has no team", async () => {

@@ -11,19 +11,32 @@ const PROTECTED_PREFIXES = [
 ] as const;
 
 const scriptUnsafeEval = process.env.NODE_ENV === "production" ? "" : " 'unsafe-eval'";
-const scriptSourcePolicy =
-  `'self' 'unsafe-inline'${scriptUnsafeEval} ` +
-  "https://*.googleapis.com https://*.gstatic.com https://maps.googleapis.com https://apis.google.com https://www.googletagmanager.com";
 
-const SECURITY_HEADERS: Readonly<Record<string, string>> = {
-  "X-Frame-Options": "DENY",
-  "X-Content-Type-Options": "nosniff",
-  "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
-  "Referrer-Policy": "strict-origin-when-cross-origin",
-  "Permissions-Policy": "camera=(), microphone=(), geolocation=(self)",
-  "Content-Security-Policy":
-    `default-src 'self'; script-src ${scriptSourcePolicy}; script-src-elem ${scriptSourcePolicy}; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://firebasestorage.googleapis.com https://lh3.googleusercontent.com https://*.googleapis.com https://*.gstatic.com; connect-src 'self' https://*.googleapis.com https://*.firebase.com https://*.firebaseio.com wss://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googletagmanager.com https://www.google-analytics.com https://*.google-analytics.com; frame-src 'self' https://*.firebaseapp.com https://*.google.com https://apis.google.com`,
-};
+function createNonce(): string {
+  return crypto.randomUUID().replace(/-/g, "");
+}
+
+function buildSecurityHeaders(nonce: string): Readonly<Record<string, string>> {
+  const scriptSourcePolicy =
+    `'self' 'nonce-${nonce}' 'strict-dynamic'${scriptUnsafeEval} ` +
+    "https://*.googleapis.com https://*.gstatic.com https://maps.googleapis.com https://apis.google.com https://www.googletagmanager.com";
+
+  return {
+    "X-Frame-Options": "DENY",
+    "X-Content-Type-Options": "nosniff",
+    "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=(self)",
+    "Content-Security-Policy":
+      `default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; ` +
+      `script-src ${scriptSourcePolicy}; script-src-elem ${scriptSourcePolicy}; script-src-attr 'none'; ` +
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+      "font-src 'self' https://fonts.gstatic.com; " +
+      "img-src 'self' data: blob: https://firebasestorage.googleapis.com https://lh3.googleusercontent.com https://*.googleapis.com https://*.gstatic.com; " +
+      "connect-src 'self' https://*.googleapis.com https://*.firebase.com https://*.firebaseio.com wss://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googletagmanager.com https://www.google-analytics.com https://*.google-analytics.com; " +
+      "frame-src 'self' https://*.firebaseapp.com https://*.google.com https://apis.google.com",
+  };
+}
 
 function isProtectedPath(pathname: string): boolean {
   return PROTECTED_PREFIXES.some(
@@ -31,10 +44,16 @@ function isProtectedPath(pathname: string): boolean {
   );
 }
 
-function withSecurityHeaders(response: NextResponse): NextResponse {
-  for (const [header, value] of Object.entries(SECURITY_HEADERS)) {
+function withSecurityHeaders(
+  response: NextResponse,
+  securityHeaders: Readonly<Record<string, string>>,
+  nonce: string
+): NextResponse {
+  for (const [header, value] of Object.entries(securityHeaders)) {
     response.headers.set(header, value);
   }
+
+  response.headers.set("x-nonce", nonce);
 
   return response;
 }
@@ -42,15 +61,32 @@ function withSecurityHeaders(response: NextResponse): NextResponse {
 export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   const hasSessionCookie = Boolean(request.cookies.get("__session")?.value);
+  const nonce = createNonce();
+  const securityHeaders = buildSecurityHeaders(nonce);
+  const requestHeaders = new Headers(request.headers);
+
+  requestHeaders.set("x-nonce", nonce);
 
   if (isProtectedPath(pathname) && !hasSessionCookie) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("redirect", `${pathname}${search}`);
 
-    return withSecurityHeaders(NextResponse.redirect(loginUrl));
+    return withSecurityHeaders(
+      NextResponse.redirect(loginUrl),
+      securityHeaders,
+      nonce
+    );
   }
 
-  return withSecurityHeaders(NextResponse.next());
+  return withSecurityHeaders(
+    NextResponse.next({
+      request: {
+        headers: requestHeaders,
+      },
+    }),
+    securityHeaders,
+    nonce
+  );
 }
 
 export const config = {

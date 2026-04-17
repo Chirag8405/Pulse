@@ -60,7 +60,7 @@ export function RewardNotification({
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [handleDismiss, open]);
+  }, [challenge, handleDismiss, open]);
 
   if (!open || !challenge) {
     return null;

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { adminDb } from "@/lib/firebase/admin";
+import { internalApiErrorResponse } from "@/lib/server/apiResponses";
 import { verifyBearerToken } from "@/lib/server/requestAuth";
 
 const QuerySchema = z.object({
@@ -86,12 +87,10 @@ export async function GET(request: NextRequest) {
       { headers: { "Cache-Control": "no-store" } }
     );
   } catch (error) {
-    return NextResponse.json(
-      {
-        error: "Failed to fetch active challenge",
-        details: error instanceof Error ? error.message : "unknown_error",
-      },
-      { status: 500 }
+    return internalApiErrorResponse(
+      "Failed to fetch active challenge",
+      error,
+      "Challenges active API failed"
     );
   }
 }
