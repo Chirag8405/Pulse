@@ -13,9 +13,10 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "json", "html"],
       thresholds: {
-        lines: 70,
-        functions: 70,
-        branches: 60,
+        statements: 75,
+        lines: 75,
+        functions: 75,
+        branches: 65,
       },
       exclude: [
         "node_modules/**",

@@ -9,6 +9,26 @@ const SESSION_COOKIE_NAME = "__session";
 const SESSION_MAX_AGE_SECONDS = 24 * 60 * 60;
 const SESSION_EXPIRES_IN_MS = SESSION_MAX_AGE_SECONDS * 1000;
 
+function hasTrustedOrigin(request: NextRequest): boolean {
+  const originHeader = request.headers.get("origin");
+
+  // Non-browser and same-origin server calls may omit Origin.
+  if (!originHeader) {
+    return true;
+  }
+
+  try {
+    const origin = new URL(originHeader);
+
+    return (
+      origin.protocol === request.nextUrl.protocol &&
+      origin.host === request.nextUrl.host
+    );
+  } catch {
+    return false;
+  }
+}
+
 function withNoStoreHeaders(response: NextResponse): NextResponse {
   response.headers.set("Cache-Control", "no-store");
   return response;
@@ -23,6 +43,7 @@ function setSessionCookie(response: NextResponse, value: string): NextResponse {
     sameSite: "lax",
     path: "/",
     maxAge: SESSION_MAX_AGE_SECONDS,
+    priority: "high",
   });
 
   return response;
@@ -43,6 +64,10 @@ function clearSessionCookie(response: NextResponse): NextResponse {
 }
 
 export async function POST(request: NextRequest) {
+  if (!hasTrustedOrigin(request)) {
+    return NextResponse.json({ error: "Untrusted origin" }, { status: 403 });
+  }
+
   const token = getBearerToken(request);
 
   if (!token) {
@@ -85,6 +110,10 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  if (!hasTrustedOrigin(request)) {
+    return NextResponse.json({ error: "Untrusted origin" }, { status: 403 });
+  }
+
   const token = getBearerToken(request);
 
   if (token) {

@@ -21,6 +21,40 @@ interface AdminRoleLikeFields {
   "is admin"?: unknown;
 }
 
+interface AdminRoleCacheEntry {
+  value: boolean;
+  expiresAt: number;
+}
+
+const ADMIN_ROLE_CACHE_TTL_MS = 10_000;
+const adminRoleCache = new Map<string, AdminRoleCacheEntry>();
+
+function readCachedAdminRole(uid: string): boolean | null {
+  const cached = adminRoleCache.get(uid);
+
+  if (!cached) {
+    return null;
+  }
+
+  if (cached.expiresAt <= Date.now()) {
+    adminRoleCache.delete(uid);
+    return null;
+  }
+
+  return cached.value;
+}
+
+function writeCachedAdminRole(uid: string, value: boolean): void {
+  adminRoleCache.set(uid, {
+    value,
+    expiresAt: Date.now() + ADMIN_ROLE_CACHE_TTL_MS,
+  });
+}
+
+export function __clearAdminRoleCacheForTests(): void {
+  adminRoleCache.clear();
+}
+
 export { getBearerToken } from "@/lib/shared/authUtils";
 
 export async function verifyBearerToken(
@@ -81,22 +115,33 @@ export async function verifyAdminBearerToken(
 }
 
 export async function readIsAdmin(uid: string): Promise<boolean> {
+  const cached = readCachedAdminRole(uid);
+
+  if (cached !== null) {
+    return cached;
+  }
+
   try {
     const userSnapshot = await adminDb.collection("users").doc(uid).get();
 
     if (!userSnapshot.exists) {
+      writeCachedAdminRole(uid, false);
       return false;
     }
 
     const userData = userSnapshot.data() as AdminRoleLikeFields;
 
-    return (
+    const isAdmin = (
       isAdminLikeValue(userData.isAdmin) ||
       isAdminLikeValue(userData.role) ||
       isAdminLikeValue(userData.admin) ||
       isAdminLikeValue(userData.is_admin) ||
       isAdminLikeValue(userData["is admin"])
     );
+
+    writeCachedAdminRole(uid, isAdmin);
+
+    return isAdmin;
   } catch {
     return false;
   }

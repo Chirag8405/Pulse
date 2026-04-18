@@ -30,6 +30,7 @@ vi.mock("@/lib/firebase/admin", () => ({
 }));
 
 import {
+  __clearAdminRoleCacheForTests,
   getBearerToken,
   readIsAdmin,
   verifyAdminBearerToken,
@@ -50,6 +51,7 @@ describe("requestAuth", () => {
     getMock.mockReset();
     docMock.mockClear();
     collectionMock.mockClear();
+    __clearAdminRoleCacheForTests();
   });
 
   it("extracts bearer token from valid authorization header", () => {
@@ -65,6 +67,12 @@ describe("requestAuth", () => {
   it("returns null for invalid authorization header format", () => {
     expect(getBearerToken(createRequest("Token abc"))).toBeNull();
     expect(getBearerToken(createRequest())).toBeNull();
+  });
+
+  it("returns null for oversized bearer tokens", () => {
+    const oversizedToken = `Bearer ${"a".repeat(8_193)}`;
+
+    expect(getBearerToken(createRequest(oversizedToken))).toBeNull();
   });
 
   it("verifyBearerToken returns 401 when token is missing", async () => {
@@ -137,6 +145,49 @@ describe("requestAuth", () => {
     expect(collectionMock).toHaveBeenCalledWith("users");
     expect(docMock).toHaveBeenCalledWith("uid-1");
     expect(isAdmin).toBe(true);
+  });
+
+  it("readIsAdmin uses cache for repeated lookups within ttl", async () => {
+    getMock.mockResolvedValue({
+      exists: true,
+      data: () => ({ isAdmin: true }),
+    });
+
+    const first = await readIsAdmin("uid-cache");
+    const second = await readIsAdmin("uid-cache");
+
+    expect(first).toBe(true);
+    expect(second).toBe(true);
+    expect(collectionMock).toHaveBeenCalledTimes(1);
+    expect(docMock).toHaveBeenCalledTimes(1);
+    expect(getMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("readIsAdmin refreshes cache after ttl expires", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-18T00:00:00.000Z"));
+
+    getMock
+      .mockResolvedValueOnce({
+        exists: true,
+        data: () => ({ isAdmin: true }),
+      })
+      .mockResolvedValueOnce({
+        exists: true,
+        data: () => ({ isAdmin: false }),
+      });
+
+    const initial = await readIsAdmin("uid-cache-expire");
+    vi.advanceTimersByTime(31_000);
+    const refreshed = await readIsAdmin("uid-cache-expire");
+
+    expect(initial).toBe(true);
+    expect(refreshed).toBe(false);
+    expect(collectionMock).toHaveBeenCalledTimes(2);
+    expect(docMock).toHaveBeenCalledTimes(2);
+    expect(getMock).toHaveBeenCalledTimes(2);
+
+    vi.useRealTimers();
   });
 
   it("readIsAdmin supports numeric admin-like values", async () => {

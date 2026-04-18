@@ -70,6 +70,10 @@ describe("proxy security headers", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("X-Frame-Options")).toBe("DENY");
+    expect(response.headers.get("X-DNS-Prefetch-Control")).toBe("off");
+    expect(response.headers.get("X-Permitted-Cross-Domain-Policies")).toBe("none");
+    expect(response.headers.get("Cross-Origin-Resource-Policy")).toBe("same-origin");
+    expect(response.headers.get("Origin-Agent-Cluster")).toBe("?1");
     expect(response.headers.get("Content-Security-Policy")).toContain("script-src");
   });
 

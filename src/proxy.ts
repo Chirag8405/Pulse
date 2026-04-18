@@ -46,6 +46,10 @@ function buildSecurityHeaders(nonce: string): Readonly<Record<string, string>> {
   const headers: Record<string, string> = {
     "X-Frame-Options": "DENY",
     "X-Content-Type-Options": "nosniff",
+    "X-DNS-Prefetch-Control": "off",
+    "X-Permitted-Cross-Domain-Policies": "none",
+    "Cross-Origin-Resource-Policy": "same-origin",
+    "Origin-Agent-Cluster": "?1",
     "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
     "Referrer-Policy": "strict-origin-when-cross-origin",
     "Permissions-Policy": "camera=(), microphone=(), geolocation=(self)",

@@ -10,6 +10,7 @@
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "test:all": "pnpm test:coverage && pnpm test:e2e",
+    "check:repo-size": "node scripts/check-repo-size.mjs 10",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "analyze": "ANALYZE=true next build"

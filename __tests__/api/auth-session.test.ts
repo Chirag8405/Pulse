@@ -18,10 +18,24 @@ vi.mock("@/lib/server/rateLimitServer", () => ({
 
 import { DELETE, POST } from "@/app/api/auth/session/route";
 
-function createRequest(method: "POST" | "DELETE", token?: string): NextRequest {
+function createRequest(
+  method: "POST" | "DELETE",
+  token?: string,
+  origin?: string
+): NextRequest {
+  const headers: Record<string, string> = {};
+
+  if (token) {
+    headers.authorization = `Bearer ${token}`;
+  }
+
+  if (origin) {
+    headers.origin = origin;
+  }
+
   return new NextRequest("http://localhost:3000/api/auth/session", {
     method,
-    headers: token ? { authorization: `Bearer ${token}` } : {},
+    headers,
   });
 }
 
@@ -70,6 +84,16 @@ describe("/api/auth/session", () => {
     expect(body.error).toBe("Too many requests");
   });
 
+  it("POST returns 403 for untrusted origins", async () => {
+    const response = await POST(
+      createRequest("POST", "token-1", "https://malicious.example")
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(body.error).toBe("Untrusted origin");
+  });
+
   it("POST sets an HttpOnly session cookie on success", async () => {
     const response = await POST(createRequest("POST", "token-1"));
 
@@ -80,6 +104,7 @@ describe("/api/auth/session", () => {
     expect(setCookie).toContain("HttpOnly");
     expect(setCookie).toContain("Path=/");
     expect(setCookie.toLowerCase()).toContain("samesite=lax");
+    expect(setCookie.toLowerCase()).toContain("priority=high");
   });
 
   it("DELETE clears session cookie even with invalid token", async () => {
@@ -92,5 +117,15 @@ describe("/api/auth/session", () => {
 
     expect(setCookie).toContain("__session=");
     expect(setCookie).toContain("Max-Age=0");
+  });
+
+  it("DELETE returns 403 for untrusted origins", async () => {
+    const response = await DELETE(
+      createRequest("DELETE", "token-1", "https://malicious.example")
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(body.error).toBe("Untrusted origin");
   });
 });

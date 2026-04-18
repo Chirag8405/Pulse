@@ -31,7 +31,7 @@ const QuerySchema = z.object({
   challengeId: z.string().trim().min(1).optional(),
 });
 
-const ZONE_OCCUPANCY_CACHE_TTL_MS = 15_000;
+const ZONE_OCCUPANCY_CACHE_TTL_MS = 30_000;
 let zoneOccupancyCache: {
   eventId: string | null;
   expiresAt: number;

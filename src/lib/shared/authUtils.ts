@@ -1,5 +1,7 @@
 import type { NextRequest } from "next/server";
 
+const MAX_BEARER_TOKEN_LENGTH = 8_192;
+
 /**
  * Extracts a Bearer token from the Authorization header of a NextRequest.
  * Shared across all API routes to avoid duplication.
@@ -11,9 +13,13 @@ export function getBearerToken(request: NextRequest): string | null {
     return null;
   }
 
-  const [scheme, token] = authorizationHeader.split(" ");
+  const [scheme, token] = authorizationHeader.trim().split(/\s+/, 2);
 
   if (scheme?.toLowerCase() !== "bearer" || !token) {
+    return null;
+  }
+
+  if (token.length > MAX_BEARER_TOKEN_LENGTH) {
     return null;
   }
 

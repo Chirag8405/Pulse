@@ -12,7 +12,7 @@ steps:
       - 'NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=48556507973'
       - 'NEXT_PUBLIC_FIREBASE_APP_ID=1:48556507973:web:96e6aab3568822814a342c'
       - 'NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=G-FCJ4P2E39X'
-    args: ['-c', 'corepack enable pnpm && pnpm install --frozen-lockfile && pnpm lint && pnpm typecheck && pnpm test:coverage && pnpm build']
+    args: ['-c', 'corepack enable pnpm && pnpm install --frozen-lockfile && pnpm check:repo-size && pnpm lint && pnpm typecheck && pnpm test:coverage && pnpm build']
 
   - id: 'build-container'
     name: 'gcr.io/cloud-builders/docker'
