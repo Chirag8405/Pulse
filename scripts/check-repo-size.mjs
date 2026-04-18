@@ -1,7 +1,20 @@
 #!/usr/bin/env node
 
 import { execSync } from "node:child_process";
-import { statSync } from "node:fs";
+import { lstatSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
+
+const FALLBACK_EXCLUDED_DIRS = new Set([
+  ".git",
+  "node_modules",
+  ".next",
+  "coverage",
+  "playwright-report",
+  "test-results",
+  "dist",
+  "build",
+  "out",
+]);
 
 function toPositiveNumber(value, fallback) {
   const parsed = Number(value);
@@ -16,16 +29,65 @@ function toPositiveNumber(value, fallback) {
 const maxMb = toPositiveNumber(process.argv[2] ?? process.env.MAX_REPO_SIZE_MB, 10);
 const maxBytes = Math.floor(maxMb * 1024 * 1024);
 
-const trackedFilesOutput = execSync("git ls-files -z", {
-  encoding: "utf8",
-  stdio: ["ignore", "pipe", "pipe"],
-});
+function getGitTrackedFiles() {
+  try {
+    const trackedFilesOutput = execSync("git ls-files -z", {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
 
-const trackedFiles = trackedFilesOutput.split("\u0000").filter((filePath) => filePath.length > 0);
+    return trackedFilesOutput
+      .split("\u0000")
+      .filter((filePath) => filePath.length > 0);
+  } catch {
+    return null;
+  }
+}
+
+function collectFallbackWorkspaceFiles(rootPath, relativePath = "") {
+  const currentPath = relativePath ? join(rootPath, relativePath) : rootPath;
+  const entries = readdirSync(currentPath, { withFileTypes: true });
+  const files = [];
+
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      if (FALLBACK_EXCLUDED_DIRS.has(entry.name)) {
+        continue;
+      }
+
+      const nextRelativePath = relativePath
+        ? join(relativePath, entry.name)
+        : entry.name;
+
+      files.push(...collectFallbackWorkspaceFiles(rootPath, nextRelativePath));
+      continue;
+    }
+
+    const fileRelativePath = relativePath
+      ? join(relativePath, entry.name)
+      : entry.name;
+
+    try {
+      const stats = lstatSync(join(rootPath, fileRelativePath));
+
+      if (!stats.isSymbolicLink() && stats.isFile()) {
+        files.push(fileRelativePath);
+      }
+    } catch {
+      // Ignore files that disappear mid-scan.
+    }
+  }
+
+  return files;
+}
+
+const trackedFiles = getGitTrackedFiles();
+const filesToMeasure = trackedFiles ?? collectFallbackWorkspaceFiles(process.cwd());
+const measurementMode = trackedFiles ? "git-tracked" : "fallback-workspace";
 
 let totalBytes = 0;
 
-for (const filePath of trackedFiles) {
+for (const filePath of filesToMeasure) {
   try {
     totalBytes += statSync(filePath).size;
   } catch {
@@ -36,7 +98,7 @@ for (const filePath of trackedFiles) {
 const totalMb = totalBytes / (1024 * 1024);
 
 console.log(
-  `Tracked repository size: ${totalBytes} bytes (${totalMb.toFixed(2)} MB) | limit: ${maxMb} MB`
+  `Repository size (${measurementMode}): ${totalBytes} bytes (${totalMb.toFixed(2)} MB) | limit: ${maxMb} MB`
 );
 
 if (totalBytes > maxBytes) {
