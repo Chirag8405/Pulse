@@ -41,6 +41,7 @@ function buildSecurityHeaders(nonce: string): Readonly<Record<string, string>> {
     `'self' 'nonce-${nonce}' 'strict-dynamic'${scriptUnsafeEval} ` +
     "https://*.googleapis.com https://*.gstatic.com https://maps.googleapis.com https://apis.google.com https://www.googletagmanager.com";
   const styleSourcePolicy = `'self' 'nonce-${nonce}' https://fonts.googleapis.com`;
+  const styleElementSourcePolicy = `'self' 'unsafe-inline' https://fonts.googleapis.com`;
 
   const headers: Record<string, string> = {
     "X-Frame-Options": "DENY",
@@ -51,7 +52,7 @@ function buildSecurityHeaders(nonce: string): Readonly<Record<string, string>> {
     "Content-Security-Policy":
       `default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; ` +
       `script-src ${scriptSourcePolicy}; script-src-elem ${scriptSourcePolicy}; script-src-attr 'none'; ` +
-      `style-src ${styleSourcePolicy}; style-src-elem ${styleSourcePolicy}; style-src-attr 'unsafe-inline'; ` +
+      `style-src ${styleSourcePolicy}; style-src-elem ${styleElementSourcePolicy}; style-src-attr 'unsafe-inline'; ` +
       "font-src 'self' https://fonts.gstatic.com; " +
       "img-src 'self' data: blob: https://firebasestorage.googleapis.com https://lh3.googleusercontent.com https://*.googleapis.com https://*.gstatic.com; " +
       "connect-src 'self' https://*.googleapis.com https://*.firebase.com https://*.firebaseio.com wss://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googletagmanager.com https://www.google-analytics.com https://*.google-analytics.com; " +

@@ -35,6 +35,11 @@ describe("proxy security headers", () => {
         .split(";")
         .map((part) => part.trim())
         .find((part) => part.startsWith("style-src ")) ?? "";
+    const styleSrcElem =
+      csp
+        .split(";")
+        .map((part) => part.trim())
+        .find((part) => part.startsWith("style-src-elem ")) ?? "";
     const styleSrcAttr =
       csp
         .split(";")
@@ -50,6 +55,7 @@ describe("proxy security headers", () => {
     expect(scriptSrc).not.toContain("'unsafe-inline'");
     expect(styleSrc).toContain(`'nonce-${nonce}'`);
     expect(styleSrc).not.toContain("'unsafe-inline'");
+    expect(styleSrcElem).toContain("'unsafe-inline'");
     expect(styleSrcAttr).toContain("'unsafe-inline'");
   });
 

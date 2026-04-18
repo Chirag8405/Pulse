@@ -188,11 +188,22 @@ export async function writeAuditLog(
   let firestoreWrite: Promise<unknown>;
 
   try {
-    firestoreWrite = adminDb.collection("audit_log").add({
-      ...entry,
+    const firestoreEntry: Record<string, unknown> = {
+      action: entry.action,
+      actorUid: entry.actorUid,
       timestamp: entry.timestamp,
       metadata: metadata ?? null,
-    });
+    };
+
+    if (entry.targetId !== undefined) {
+      firestoreEntry.targetId = entry.targetId;
+    }
+
+    if (entry.ipAddress !== undefined) {
+      firestoreEntry.ipAddress = entry.ipAddress;
+    }
+
+    firestoreWrite = adminDb.collection("audit_log").add(firestoreEntry);
   } catch (error) {
     logger.error("Failed to initialize audit log write", {
       action,
