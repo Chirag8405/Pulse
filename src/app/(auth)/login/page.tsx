@@ -54,14 +54,7 @@ function getAuthPageErrorMessage(error: unknown): string {
 
 function LoginFallback() {
   return (
-    <div
-      className="flex min-h-screen items-center justify-center bg-background px-4 py-10"
-      style={{
-        backgroundImage:
-          "radial-gradient(circle, #d1d5db 1px, transparent 1px)",
-        backgroundSize: "24px 24px",
-      }}
-    >
+    <div className="nb-dot-grid-bg flex min-h-screen items-center justify-center bg-background px-4 py-10">
       <section className="w-full max-w-sm border-2 border-black bg-card p-6 shadow-[4px_4px_0px_0px_rgb(0_0_0)]">
         <h1 className="font-mono text-4xl font-black tracking-tight text-primary">
           {APP_NAME}
@@ -157,14 +150,7 @@ function LoginContent() {
   const isPending = pendingMethod !== null;
 
   return (
-    <div
-      className="flex min-h-screen items-center justify-center bg-background px-4 py-10"
-      style={{
-        backgroundImage:
-          "radial-gradient(circle, #d1d5db 1px, transparent 1px)",
-        backgroundSize: "24px 24px",
-      }}
-    >
+    <div className="nb-dot-grid-bg flex min-h-screen items-center justify-center bg-background px-4 py-10">
       <section className="w-full max-w-sm border-2 border-black bg-card p-6 shadow-[4px_4px_0px_0px_rgb(0_0_0)]">
         <h1 className="font-mono text-4xl font-black tracking-tight text-primary">
           {APP_NAME}

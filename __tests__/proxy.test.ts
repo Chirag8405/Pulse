@@ -35,6 +35,11 @@ describe("proxy security headers", () => {
         .split(";")
         .map((part) => part.trim())
         .find((part) => part.startsWith("style-src ")) ?? "";
+    const styleSrcAttr =
+      csp
+        .split(";")
+        .map((part) => part.trim())
+        .find((part) => part.startsWith("style-src-attr ")) ?? "";
 
     expect(response.status).toBe(307);
     expect(response.headers.get("location")).toContain(
@@ -45,6 +50,7 @@ describe("proxy security headers", () => {
     expect(scriptSrc).not.toContain("'unsafe-inline'");
     expect(styleSrc).toContain(`'nonce-${nonce}'`);
     expect(styleSrc).not.toContain("'unsafe-inline'");
+    expect(styleSrcAttr).toContain("'unsafe-inline'");
   });
 
   it("allows protected routes for authenticated users", () => {
