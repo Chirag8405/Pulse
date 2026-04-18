@@ -5,6 +5,7 @@ import { limit, onSnapshot, orderBy, query } from "firebase/firestore";
 import { teamProgressCollection } from "@/lib/firebase/collections";
 import { fetchChallengeTeamProgress as fetchChallengeTeamProgressFromApi } from "@/lib/firebase/realtimeApi";
 import { getErrorMessage } from "@/lib/shared/errorUtils";
+import { startAdaptivePolling } from "@/lib/shared/polling";
 import type { ChallengeTeamProgress } from "@/types/firebase";
 
 interface UseLeaderboardResult {
@@ -93,50 +94,22 @@ export function useLeaderboard(
     }
 
     if (!shouldUseRealtimeListeners) {
-      let active = true;
-      let inFlight = false;
-
-      const tick = async () => {
-        if (!active || inFlight) {
-          return;
-        }
-
-        inFlight = true;
-
-        try {
-          const rows = await fetchChallengeTeamProgressFromApi(challengeId);
-
-          if (!active) {
-            return;
+      return startAdaptivePolling({
+        intervalMs: firestorePollIntervalMs,
+        run: async () => {
+          try {
+            const rows = await fetchChallengeTeamProgressFromApi(challengeId);
+            handleLeaderboardUpdate(rows);
+          } catch (error) {
+            setSnapshot({
+              key,
+              data: [],
+              error: getLeaderboardErrorMessage(error),
+              resolved: true,
+            });
           }
-
-          handleLeaderboardUpdate(rows);
-        } catch (error) {
-          if (!active) {
-            return;
-          }
-
-          setSnapshot({
-            key,
-            data: [],
-            error: getLeaderboardErrorMessage(error),
-            resolved: true,
-          });
-        } finally {
-          inFlight = false;
-        }
-      };
-
-      void tick();
-
-      const intervalId = window.setInterval(() => {
-        void tick();
-      }, firestorePollIntervalMs);
-
-      return () => {
-        active = false;
-        window.clearInterval(intervalId);
-      };
+        },
+      });
     }
 
     const safeLimit = Math.max(1, Math.floor(leaderboardLimit));

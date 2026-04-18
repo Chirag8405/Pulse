@@ -1,7 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const addMock = vi.hoisted(() => vi.fn());
-const collectionMock = vi.hoisted(() => vi.fn(() => ({ add: addMock })));
+const addAuditLogMock = vi.hoisted(() => vi.fn());
+const addOutboxMock = vi.hoisted(() => vi.fn());
+const collectionMock = vi.hoisted(() => vi.fn((collectionName: string) => {
+  if (collectionName === "audit_log_outbox") {
+    return { add: addOutboxMock };
+  }
+
+  return { add: addAuditLogMock };
+}));
 const bigQueryWriteMock = vi.hoisted(() => vi.fn());
 const loggerInfoMock = vi.hoisted(() => vi.fn());
 const loggerErrorMock = vi.hoisted(() => vi.fn());
@@ -31,7 +38,8 @@ import { logAuditEvent, writeAuditLog } from "@/lib/server/auditLog";
 describe("auditLog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    addMock.mockResolvedValue(undefined);
+    addAuditLogMock.mockResolvedValue(undefined);
+    addOutboxMock.mockResolvedValue(undefined);
     bigQueryWriteMock.mockResolvedValue(true);
   });
 
@@ -54,9 +62,10 @@ describe("auditLog", () => {
     });
 
     expect(collectionMock).toHaveBeenCalledWith("audit_log");
-    expect(addMock).toHaveBeenCalledTimes(1);
+    expect(addAuditLogMock).toHaveBeenCalledTimes(1);
+    expect(addOutboxMock).not.toHaveBeenCalled();
 
-    const firestorePayload = addMock.mock.calls[0]?.[0] as {
+    const firestorePayload = addAuditLogMock.mock.calls[0]?.[0] as {
       metadata?: {
         longText?: string;
         nested?: {
@@ -87,7 +96,7 @@ describe("auditLog", () => {
   });
 
   it("does not throw when Firestore write fails", async () => {
-    addMock.mockRejectedValue(new Error("firestore_unavailable"));
+    addAuditLogMock.mockRejectedValue(new Error("firestore_unavailable"));
     bigQueryWriteMock.mockResolvedValue(true);
 
     await expect(
@@ -110,7 +119,43 @@ describe("auditLog", () => {
 
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(addMock).toHaveBeenCalledTimes(1);
+    expect(addAuditLogMock).toHaveBeenCalledTimes(1);
     expect(bigQueryWriteMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("queues an outbox entry when BigQuery sink returns false", async () => {
+    bigQueryWriteMock.mockResolvedValue(false);
+
+    await writeAuditLog("team.joined", "user-5", {
+      targetId: "team-5",
+      metadata: { source: "api" },
+    });
+
+    expect(addOutboxMock).toHaveBeenCalledTimes(1);
+    expect(addOutboxMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "team.joined",
+        actorUid: "user-5",
+        targetId: "team-5",
+        sink: "bigquery",
+      })
+    );
+  });
+
+  it("queues an outbox entry when BigQuery write rejects", async () => {
+    bigQueryWriteMock.mockRejectedValue(new Error("bq_down"));
+
+    await writeAuditLog("user.deleted", "user-6", {
+      targetId: "user-6",
+    });
+
+    expect(addOutboxMock).toHaveBeenCalledTimes(1);
+    expect(loggerErrorMock).toHaveBeenCalledWith(
+      "Unexpected BigQuery audit write failure",
+      expect.objectContaining({
+        action: "user.deleted",
+        actorUid: "user-6",
+      })
+    );
   });
 });

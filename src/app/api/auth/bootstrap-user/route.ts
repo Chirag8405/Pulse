@@ -41,7 +41,11 @@ const ADMIN_EMAILS = new Set(
     .filter(Boolean)
 );
 
-const AUTO_BOOTSTRAP_FIRST_ADMIN = process.env.AUTO_BOOTSTRAP_FIRST_ADMIN !== "false";
+const AUTO_BOOTSTRAP_FIRST_ADMIN = process.env.AUTO_BOOTSTRAP_FIRST_ADMIN === "true";
+
+function hasVerifiedEmail(decodedToken: Record<string, unknown>): boolean {
+  return decodedToken.email_verified === true;
+}
 
 function getNumber(value: unknown, fallback = 0): number {
   return typeof value === "number" ? value : fallback;
@@ -165,7 +169,9 @@ export async function POST(request: NextRequest) {
 
     const uid = decodedToken.uid;
     const normalizedEmail = (decodedToken.email ?? "").trim().toLowerCase();
-    const allowlistedAdmin = normalizedEmail.length > 0 && ADMIN_EMAILS.has(normalizedEmail);
+    const emailVerified = hasVerifiedEmail(decodedToken as Record<string, unknown>);
+    const allowlistedAdmin =
+      emailVerified && normalizedEmail.length > 0 && ADMIN_EMAILS.has(normalizedEmail);
     const claimAdmin = hasAdminClaim(decodedToken as AdminClaims);
 
     const userReference = adminDb.collection("users").doc(uid);
@@ -218,7 +224,13 @@ export async function POST(request: NextRequest) {
     const existingAdmin = hasExistingAdminFlag(legacyData);
 
     let firstUserAdmin = false;
-    if (!existingAdmin && !allowlistedAdmin && !claimAdmin && AUTO_BOOTSTRAP_FIRST_ADMIN) {
+    if (
+      !existingAdmin &&
+      !allowlistedAdmin &&
+      !claimAdmin &&
+      emailVerified &&
+      AUTO_BOOTSTRAP_FIRST_ADMIN
+    ) {
       const adminSnapshot = await adminDb
         .collection("users")
         .where("isAdmin", "==", true)

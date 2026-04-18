@@ -1,5 +1,8 @@
 import { NextRequest } from "next/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const initialAdminEmails = process.env.ADMIN_EMAILS;
+const initialAutoBootstrapFirstAdmin = process.env.AUTO_BOOTSTRAP_FIRST_ADMIN;
 
 const verifyIdTokenMock = vi.hoisted(() => vi.fn());
 const getMock = vi.hoisted(() => vi.fn());
@@ -7,6 +10,7 @@ const setMock = vi.hoisted(() => vi.fn());
 const docMock = vi.hoisted(() => vi.fn(() => ({ get: getMock, set: setMock })));
 const collectionMock = vi.hoisted(() =>
   vi.fn(() => ({
+    add: vi.fn(() => Promise.resolve(undefined)),
     doc: docMock,
     where: vi.fn(() => ({
       limit: vi.fn(() => ({
@@ -35,6 +39,13 @@ function createRequest(token?: string): NextRequest {
 describe("POST /api/auth/bootstrap-user", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env.ADMIN_EMAILS = "";
+    process.env.AUTO_BOOTSTRAP_FIRST_ADMIN = "false";
+  });
+
+  afterEach(() => {
+    process.env.ADMIN_EMAILS = initialAdminEmails;
+    process.env.AUTO_BOOTSTRAP_FIRST_ADMIN = initialAutoBootstrapFirstAdmin;
   });
 
   it("returns 401 when no bearer token provided", async () => {
@@ -100,7 +111,8 @@ describe("POST /api/auth/bootstrap-user", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body).toHaveProperty("isAdmin");
+    expect(body.isAdmin).toBe(false);
     expect(body).toHaveProperty("teamId");
   });
+
 });

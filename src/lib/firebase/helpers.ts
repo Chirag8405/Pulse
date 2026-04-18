@@ -1,7 +1,6 @@
 import type { User as FirebaseUser } from "firebase/auth";
 import {
   Timestamp,
-  arrayUnion,
   getDoc,
   getDocFromServer,
   getDocs,
@@ -11,7 +10,6 @@ import {
   query,
   serverTimestamp,
   setDoc,
-  writeBatch,
   where,
 } from "firebase/firestore";
 import { VENUE_NAME } from "@/constants";
@@ -24,7 +22,7 @@ import {
   teamProgressDoc,
   userDoc,
 } from "@/lib/firebase/collections";
-import { auth, db } from "@/lib/firebase/config";
+import { auth } from "@/lib/firebase/config";
 import { LocationUpdateSchema } from "@/lib/schemas";
 import { isAdminLikeValue } from "@/lib/shared/authUtils";
 import type {
@@ -67,19 +65,11 @@ export async function getUserById(uid: string): Promise<User | null> {
   try {
     const snapshot = await getDocFromServer(userReference);
 
-    if (process.env.NODE_ENV === "development") {
-      console.log("[getUserById] uid:", uid, "isAdmin:", snapshot.data()?.isAdmin);
-    }
-
     return snapshot.exists() ? normalizeUserAdminFlag(snapshot.data()) : null;
   } catch {
     try {
       // Fall back to cached lookup if server is temporarily unavailable.
       const snapshot = await getDoc(userReference);
-
-      if (process.env.NODE_ENV === "development") {
-        console.log("[getUserById] uid:", uid, "isAdmin:", snapshot.data()?.isAdmin);
-      }
 
       return snapshot.exists() ? normalizeUserAdminFlag(snapshot.data()) : null;
     } catch {
@@ -212,17 +202,10 @@ export async function getOrCreateUser(firebaseUser: FirebaseUser): Promise<User>
 
     try {
       await setDoc(userDoc(firebaseUser.uid), newUser, { merge: true });
-    } catch (writeError) {
+    } catch {
       const hydratedUser = await getUserById(firebaseUser.uid).catch(() => null);
       if (hydratedUser) {
         return applyBootstrapOverrides(hydratedUser, bootstrappedIsAdmin, bootstrappedTeamId);
-      }
-
-      if (process.env.NODE_ENV === "development") {
-        console.warn("[getOrCreateUser] fallback user hydration after setDoc failure", {
-          uid: firebaseUser.uid,
-          message: writeError instanceof Error ? writeError.message : String(writeError),
-        });
       }
 
       return newUser;
@@ -365,18 +348,4 @@ export async function updateUserLocation(
     },
     { merge: true }
   );
-}
-
-export async function joinTeam(userId: string, teamId: string): Promise<void> {
-  const batch = writeBatch(db);
-
-  batch.update(teamDoc(teamId), {
-    memberIds: arrayUnion(userId),
-  });
-
-  batch.update(userDoc(userId), {
-    teamId,
-  });
-
-  await batch.commit();
 }

@@ -21,6 +21,7 @@ import {
   fetchZoneOccupancy as fetchZoneOccupancyFromApi,
 } from "@/lib/firebase/realtimeApi";
 import { getErrorMessage } from "@/lib/shared/errorUtils";
+import { startAdaptivePolling } from "@/lib/shared/polling";
 import type { Challenge, Event, Team } from "@/types/firebase";
 
 interface FeedResult<T> {
@@ -79,43 +80,6 @@ function safeUnsubscribe(unsubscribe: () => void, source: string): void {
   }
 }
 
-function startPolling(
-  source: string,
-  run: () => Promise<void>
-): () => void {
-  let active = true;
-  let inFlight = false;
-
-  const tick = async () => {
-    if (!active || inFlight) {
-      return;
-    }
-
-    inFlight = true;
-
-    try {
-      await run();
-    } catch (error) {
-      if (process.env.NODE_ENV === "development") {
-        console.warn(`[useAdminRealtime] polling tick failed (${source})`, error);
-      }
-    } finally {
-      inFlight = false;
-    }
-  };
-
-  void tick();
-
-  const intervalId = window.setInterval(() => {
-    void tick();
-  }, firestorePollIntervalMs);
-
-  return () => {
-    active = false;
-    window.clearInterval(intervalId);
-  };
-}
-
 export interface ZoneOccupancyData {
   byZone: Record<string, number>;
   totalActiveMembers: number;
@@ -150,7 +114,9 @@ export function useEventsFeed(feedLimit = 30): FeedResult<Event[]> {
 
   useEffect(() => {
     if (!shouldUseRealtimeListeners) {
-      return startPolling("useEventsFeed", async () => {
+      return startAdaptivePolling({
+        intervalMs: firestorePollIntervalMs,
+        run: async () => {
         try {
           const events = await fetchEventsFeedFromApi(
             Math.max(1, Math.floor(feedLimit))
@@ -168,6 +134,12 @@ export function useEventsFeed(feedLimit = 30): FeedResult<Event[]> {
             resolved: true,
           });
         }
+        },
+        onError: (error) => {
+          if (process.env.NODE_ENV === "development") {
+            console.warn("[useAdminRealtime] polling tick failed (useEventsFeed)", error);
+          }
+        },
       });
     }
 
@@ -223,7 +195,9 @@ export function useChallengesFeed(feedLimit = 100): FeedResult<Challenge[]> {
 
   useEffect(() => {
     if (!shouldUseRealtimeListeners) {
-      return startPolling("useChallengesFeed", async () => {
+      return startAdaptivePolling({
+        intervalMs: firestorePollIntervalMs,
+        run: async () => {
         try {
           const challenges = await fetchChallengesFeedFromApi(
             Math.max(1, Math.floor(feedLimit))
@@ -241,6 +215,15 @@ export function useChallengesFeed(feedLimit = 100): FeedResult<Challenge[]> {
             resolved: true,
           });
         }
+        },
+        onError: (error) => {
+          if (process.env.NODE_ENV === "development") {
+            console.warn(
+              "[useAdminRealtime] polling tick failed (useChallengesFeed)",
+              error
+            );
+          }
+        },
       });
     }
 
@@ -316,7 +299,9 @@ export function useTeamsByEvent(
     }
 
     if (!shouldUseRealtimeListeners) {
-      return startPolling("useTeamsByEvent", async () => {
+      return startAdaptivePolling({
+        intervalMs: firestorePollIntervalMs,
+        run: async () => {
         try {
           const teams = await fetchTeamsByEventFromApi(eventId);
 
@@ -334,6 +319,12 @@ export function useTeamsByEvent(
             resolved: true,
           });
         }
+        },
+        onError: (error) => {
+          if (process.env.NODE_ENV === "development") {
+            console.warn("[useAdminRealtime] polling tick failed (useTeamsByEvent)", error);
+          }
+        },
       });
     }
 
@@ -375,26 +366,34 @@ export function useZoneOccupancy(): FeedResult<ZoneOccupancyData> {
   });
 
   useEffect(() => {
-    return startPolling("useZoneOccupancy", async () => {
-      try {
-        const occupancy = await fetchZoneOccupancyFromApi();
+    return startAdaptivePolling({
+      intervalMs: firestorePollIntervalMs,
+      run: async () => {
+        try {
+          const occupancy = await fetchZoneOccupancyFromApi();
 
-        setState({
-          data: {
-            byZone: occupancy.byZone,
-            totalActiveMembers: occupancy.totalActiveMembers,
-            updatedAtMillis: occupancy.updatedAtMillis,
-          },
-          error: null,
-          resolved: true,
-        });
-      } catch (error) {
-        setState((currentState) => ({
-          data: currentState.data,
-          error: getRealtimeErrorMessage(error),
-          resolved: true,
-        }));
-      }
+          setState({
+            data: {
+              byZone: occupancy.byZone,
+              totalActiveMembers: occupancy.totalActiveMembers,
+              updatedAtMillis: occupancy.updatedAtMillis,
+            },
+            error: null,
+            resolved: true,
+          });
+        } catch (error) {
+          setState((currentState) => ({
+            data: currentState.data,
+            error: getRealtimeErrorMessage(error),
+            resolved: true,
+          }));
+        }
+      },
+      onError: (error) => {
+        if (process.env.NODE_ENV === "development") {
+          console.warn("[useAdminRealtime] polling tick failed (useZoneOccupancy)", error);
+        }
+      },
     });
   }, []);
 

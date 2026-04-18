@@ -5,6 +5,7 @@ import { limit, onSnapshot, orderBy, query, where } from "firebase/firestore";
 import { challengesCollection } from "@/lib/firebase/collections";
 import { fetchChallengesFeed as fetchChallengesFeedFromApi } from "@/lib/firebase/realtimeApi";
 import { getErrorMessage } from "@/lib/shared/errorUtils";
+import { startAdaptivePolling } from "@/lib/shared/polling";
 import type { Challenge } from "@/types/firebase";
 
 interface UseActiveChallengeResult {
@@ -99,55 +100,28 @@ export function useActiveChallenge(
     }
 
     if (!shouldUseRealtimeListeners) {
-      let active = true;
-      let inFlight = false;
+      return startAdaptivePolling({
+        intervalMs: firestorePollIntervalMs,
+        run: async () => {
+          try {
+            const challenges = await fetchChallengesFeedFromApi(300);
 
-      const tick = async () => {
-        if (!active || inFlight) {
-          return;
-        }
-
-        inFlight = true;
-
-        try {
-          const challenges = await fetchChallengesFeedFromApi(300);
-
-          if (!active) {
-            return;
+            setSnapshot({
+              eventId,
+              data: selectActiveChallenge(challenges, eventId),
+              error: null,
+              resolved: true,
+            });
+          } catch (error) {
+            setSnapshot({
+              eventId,
+              data: null,
+              error: getErrorMessage(error),
+              resolved: true,
+            });
           }
-
-          setSnapshot({
-            eventId,
-            data: selectActiveChallenge(challenges, eventId),
-            error: null,
-            resolved: true,
-          });
-        } catch (error) {
-          if (!active) {
-            return;
-          }
-
-          setSnapshot({
-            eventId,
-            data: null,
-            error: getErrorMessage(error),
-            resolved: true,
-          });
-        } finally {
-          inFlight = false;
-        }
-      };
-
-      void tick();
-
-      const intervalId = window.setInterval(() => {
-        void tick();
-      }, firestorePollIntervalMs);
-
-      return () => {
-        active = false;
-        window.clearInterval(intervalId);
-      };
+        },
+      });
     }
 
     const activeChallengeQuery = query(

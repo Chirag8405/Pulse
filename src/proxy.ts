@@ -16,13 +16,33 @@ function createNonce(): string {
   return crypto.randomUUID().replace(/-/g, "");
 }
 
+function isJwtLikeValue(value: string): boolean {
+  const segments = value.split(".");
+
+  return segments.length === 3 && segments.every((segment) => segment.length > 0);
+}
+
+function hasUsableSessionCookie(request: NextRequest): boolean {
+  const value = request.cookies.get("__session")?.value?.trim();
+
+  if (!value) {
+    return false;
+  }
+
+  if (process.env.NODE_ENV !== "production") {
+    return true;
+  }
+
+  return isJwtLikeValue(value);
+}
+
 function buildSecurityHeaders(nonce: string): Readonly<Record<string, string>> {
   const scriptSourcePolicy =
     `'self' 'nonce-${nonce}' 'strict-dynamic'${scriptUnsafeEval} ` +
     "https://*.googleapis.com https://*.gstatic.com https://maps.googleapis.com https://apis.google.com https://www.googletagmanager.com";
   const styleSourcePolicy = `'self' 'nonce-${nonce}' https://fonts.googleapis.com`;
 
-  return {
+  const headers: Record<string, string> = {
     "X-Frame-Options": "DENY",
     "X-Content-Type-Options": "nosniff",
     "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
@@ -37,6 +57,12 @@ function buildSecurityHeaders(nonce: string): Readonly<Record<string, string>> {
       "connect-src 'self' https://*.googleapis.com https://*.firebase.com https://*.firebaseio.com wss://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googletagmanager.com https://www.google-analytics.com https://*.google-analytics.com; " +
       "frame-src 'self' https://*.firebaseapp.com https://*.google.com https://apis.google.com",
   };
+
+  if (process.env.NODE_ENV === "production") {
+    headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains; preload";
+  }
+
+  return headers;
 }
 
 function isProtectedPath(pathname: string): boolean {
@@ -61,7 +87,7 @@ function withSecurityHeaders(
 
 export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
-  const hasSessionCookie = Boolean(request.cookies.get("__session")?.value);
+  const hasSessionCookie = hasUsableSessionCookie(request);
   const nonce = createNonce();
   const securityHeaders = buildSecurityHeaders(nonce);
   const requestHeaders = new Headers(request.headers);

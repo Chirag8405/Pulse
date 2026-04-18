@@ -9,8 +9,6 @@ import {
 } from "firebase/auth";
 import { auth } from "@/lib/firebase/config";
 
-const SESSION_COOKIE_NAME = "__session";
-
 function requireAuth(): Auth {
   if (!auth) {
     throw new Error("Firebase Auth is only available in the browser.");
@@ -19,28 +17,44 @@ function requireAuth(): Auth {
   return auth;
 }
 
-function setSessionCookie(): void {
-  if (typeof document === "undefined") {
-    return;
-  }
-
-  const secureAttribute =
-    typeof window !== "undefined" && window.location.protocol === "https:"
-      ? "; Secure"
-      : "";
-
-  // Use a timestamp-based value instead of a static flag to reduce forgery surface.
-  const cookieValue = `s.${Date.now().toString(36)}`;
-
-  document.cookie = `${SESSION_COOKIE_NAME}=${cookieValue}; Path=/; Max-Age=86400; SameSite=Lax${secureAttribute}`;
+interface SessionApiResponse {
+  error?: string;
 }
 
-function clearSessionCookie(): void {
-  if (typeof document === "undefined") {
+async function createServerSession(
+  authClient: Auth,
+  forceTokenRefresh: boolean
+): Promise<void> {
+  const currentUser = authClient.currentUser;
+
+  if (!currentUser) {
+    throw new Error("No signed-in account found.");
+  }
+
+  const token = await currentUser.getIdToken(forceTokenRefresh);
+  const response = await fetch("/api/auth/session", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    cache: "no-store",
+  });
+
+  if (response.ok) {
     return;
   }
 
-  document.cookie = `${SESSION_COOKIE_NAME}=; Path=/; Max-Age=0; SameSite=Lax`;
+  const payload = (await response.json().catch(() => null)) as
+    | SessionApiResponse
+    | null;
+  throw new Error(payload?.error ?? "Failed to initialize secure session.");
+}
+
+async function clearServerSession(): Promise<void> {
+  await fetch("/api/auth/session", {
+    method: "DELETE",
+    cache: "no-store",
+  }).catch(() => null);
 }
 
 interface GoogleSignInOptions {
@@ -55,7 +69,7 @@ export async function signInWithGoogle(
 
   if (options.clearExistingSession && authClient.currentUser) {
     await firebaseSignOut(authClient);
-    clearSessionCookie();
+    await clearServerSession();
   }
 
   const provider = new GoogleAuthProvider();
@@ -68,22 +82,26 @@ export async function signInWithGoogle(
 
   const credential = await signInWithPopup(authClient, provider);
   if (credential.user) {
-    setSessionCookie();
+    await createServerSession(authClient, true);
   }
 }
 
 export async function signInAnonymously(): Promise<FirebaseUser> {
   const authClient = requireAuth();
   const credential = await firebaseSignInAnonymously(authClient);
-  setSessionCookie();
+  await createServerSession(authClient, true);
 
   return credential.user;
 }
 
 export async function signOut(): Promise<void> {
   const authClient = requireAuth();
-  await firebaseSignOut(authClient);
-  clearSessionCookie();
+
+  try {
+    await firebaseSignOut(authClient);
+  } finally {
+    await clearServerSession();
+  }
 }
 
 export async function deleteAccount(): Promise<void> {
@@ -114,7 +132,7 @@ export async function deleteAccount(): Promise<void> {
   try {
     await firebaseSignOut(authClient);
   } finally {
-    clearSessionCookie();
+    await clearServerSession();
   }
 }
 
@@ -125,9 +143,9 @@ export function onAuthChange(
 
   return onAuthStateChanged(authClient, (user) => {
     if (user) {
-      setSessionCookie();
+      void createServerSession(authClient, false).catch(() => null);
     } else {
-      clearSessionCookie();
+      void clearServerSession();
     }
 
     callback(user);

@@ -38,20 +38,22 @@ const getLocationErrorMessage = (error: unknown) =>
   getErrorMessage(error, "Could not update your location.");
 
 function getNearestZoneId(lat: number, lng: number): string {
-  const nearestZone = ZONES.toSorted((left, right) => {
-    const leftDistance = haversineDistance(
+  let nearestZoneId: string = ZONES[0].id;
+  let shortestDistance = Number.POSITIVE_INFINITY;
+
+  ZONES.forEach((zone) => {
+    const zoneDistance = haversineDistance(
       { lat, lng },
-      { lat: left.lat, lng: left.lng }
-    );
-    const rightDistance = haversineDistance(
-      { lat, lng },
-      { lat: right.lat, lng: right.lng }
+      { lat: zone.lat, lng: zone.lng }
     );
 
-    return leftDistance - rightDistance;
-  })[0];
+    if (zoneDistance < shortestDistance) {
+      shortestDistance = zoneDistance;
+      nearestZoneId = zone.id;
+    }
+  });
 
-  return nearestZone?.id ?? ZONES[0].id;
+  return nearestZoneId;
 }
 
 export function useLocationTracking({

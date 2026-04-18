@@ -4,9 +4,7 @@ const mocks = vi.hoisted(() => {
   return {
     getDoc: vi.fn(),
     setDoc: vi.fn(),
-    writeBatch: vi.fn(),
     serverTimestamp: vi.fn(() => "SERVER_TIMESTAMP"),
-    arrayUnion: vi.fn((value: string) => ({ __arrayUnion: value })),
     userDoc: vi.fn((uid: string) => `user:${uid}`),
     teamDoc: vi.fn((teamId: string) => `team:${teamId}`),
     memberLocationDoc: vi.fn(
@@ -24,7 +22,6 @@ vi.mock("firebase/firestore", () => ({
   Timestamp: {
     now: vi.fn(() => ({ toMillis: () => 0 })),
   },
-  arrayUnion: mocks.arrayUnion,
   getDoc: mocks.getDoc,
   getDocs: vi.fn(),
   limit: vi.fn(),
@@ -33,7 +30,6 @@ vi.mock("firebase/firestore", () => ({
   query: vi.fn(),
   serverTimestamp: mocks.serverTimestamp,
   setDoc: mocks.setDoc,
-  writeBatch: mocks.writeBatch,
   where: vi.fn(),
 }));
 
@@ -54,7 +50,6 @@ vi.mock("@/lib/firebase/config", () => ({
 
 import {
   getUserById,
-  joinTeam,
   updateUserLocation,
 } from "@/lib/firebase/helpers";
 
@@ -151,23 +146,4 @@ describe("firebase helpers", () => {
     vi.unstubAllGlobals();
   });
 
-  it("joinTeam uses a Firestore write batch", async () => {
-    const batch = {
-      update: vi.fn(),
-      commit: vi.fn().mockResolvedValue(undefined),
-    };
-
-    mocks.writeBatch.mockReturnValue(batch);
-
-    await joinTeam("user-9", "team-9");
-
-    expect(mocks.writeBatch).toHaveBeenCalledWith({ id: "mock-db" });
-    expect(batch.update).toHaveBeenCalledWith("team:team-9", {
-      memberIds: { __arrayUnion: "user-9" },
-    });
-    expect(batch.update).toHaveBeenCalledWith("user:user-9", {
-      teamId: "team-9",
-    });
-    expect(batch.commit).toHaveBeenCalledTimes(1);
-  });
 });

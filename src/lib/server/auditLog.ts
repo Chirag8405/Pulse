@@ -10,6 +10,7 @@ import {
 import { createLogger } from "@/lib/google/logging";
 
 const logger = createLogger("audit");
+const BIGQUERY_AUDIT_OUTBOX_COLLECTION = "audit_log_outbox";
 
 const MAX_METADATA_DEPTH = 3;
 const MAX_METADATA_KEYS = 40;
@@ -40,6 +41,18 @@ interface AuditEntry {
   metadata?: JsonObject;
   timestamp: Date;
   ipAddress?: string;
+}
+
+interface AuditOutboxEntry {
+  action: AuditAction;
+  actorUid: string;
+  targetId: string | null;
+  metadata: JsonObject | null;
+  timestamp: Date;
+  ipAddress: string | null;
+  reason: string;
+  createdAt: Date;
+  sink: "bigquery";
 }
 
 function sanitizeString(value: string): string {
@@ -120,6 +133,25 @@ function sanitizeMetadata(
   }
 
   return undefined;
+}
+
+async function enqueueBigQueryOutboxEntry(
+  entry: AuditEntry,
+  reason: string
+): Promise<void> {
+  const outboxEntry: AuditOutboxEntry = {
+    action: entry.action,
+    actorUid: entry.actorUid,
+    targetId: entry.targetId ?? null,
+    metadata: entry.metadata ?? null,
+    timestamp: entry.timestamp,
+    ipAddress: entry.ipAddress ?? null,
+    reason,
+    createdAt: new Date(),
+    sink: "bigquery",
+  };
+
+  await adminDb.collection(BIGQUERY_AUDIT_OUTBOX_COLLECTION).add(outboxEntry);
 }
 
 /**
@@ -218,6 +250,33 @@ export async function writeAuditLog(
           ? bigQueryResult.reason.message
           : String(bigQueryResult.reason),
     });
+
+    try {
+      await enqueueBigQueryOutboxEntry(
+        entry,
+        bigQueryResult.reason instanceof Error
+          ? bigQueryResult.reason.message
+          : String(bigQueryResult.reason)
+      );
+    } catch (outboxError) {
+      logger.error("Failed to enqueue BigQuery outbox entry", {
+        action,
+        actorUid,
+        error: outboxError instanceof Error ? outboxError.message : String(outboxError),
+      });
+    }
+  }
+
+  if (bigQueryResult.status === "fulfilled" && bigQueryResult.value === false) {
+    try {
+      await enqueueBigQueryOutboxEntry(entry, "BigQuery sink returned false");
+    } catch (outboxError) {
+      logger.error("Failed to enqueue BigQuery outbox entry", {
+        action,
+        actorUid,
+        error: outboxError instanceof Error ? outboxError.message : String(outboxError),
+      });
+    }
   }
 }
 

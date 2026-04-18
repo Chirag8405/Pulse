@@ -5,6 +5,7 @@ import { limit, onSnapshot, orderBy, query, where } from "firebase/firestore";
 import { eventsCollection } from "@/lib/firebase/collections";
 import { fetchEventsFeed as fetchEventsFeedFromApi } from "@/lib/firebase/realtimeApi";
 import { getErrorMessage } from "@/lib/shared/errorUtils";
+import { startAdaptivePolling } from "@/lib/shared/polling";
 import type { Event } from "@/types/firebase";
 
 interface UseActiveEventResult {
@@ -58,48 +59,21 @@ export function useActiveEvent(): UseActiveEventResult {
 
   useEffect(() => {
     if (!shouldUseRealtimeListeners) {
-      let active = true;
-      let inFlight = false;
+      return startAdaptivePolling({
+        intervalMs: firestorePollIntervalMs,
+        run: async () => {
+          try {
+            const events = await fetchEventsFeedFromApi(120);
 
-      const tick = async () => {
-        if (!active || inFlight) {
-          return;
-        }
-
-        inFlight = true;
-
-        try {
-          const events = await fetchEventsFeedFromApi(120);
-
-          if (!active) {
-            return;
+            setData(selectActiveEvent(events));
+            setError(null);
+            setLoading(false);
+          } catch (error) {
+            setError(getActiveEventErrorMessage(error));
+            setLoading(false);
           }
-
-          setData(selectActiveEvent(events));
-          setError(null);
-          setLoading(false);
-        } catch (error) {
-          if (!active) {
-            return;
-          }
-
-          setError(getActiveEventErrorMessage(error));
-          setLoading(false);
-        } finally {
-          inFlight = false;
-        }
-      };
-
-      void tick();
-
-      const intervalId = window.setInterval(() => {
-        void tick();
-      }, firestorePollIntervalMs);
-
-      return () => {
-        active = false;
-        window.clearInterval(intervalId);
-      };
+        },
+      });
     }
 
     const activeEventQuery = query(

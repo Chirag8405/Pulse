@@ -1,6 +1,16 @@
 import { NextRequest } from "next/server";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { config, proxy } from "@/proxy";
+
+const initialNodeEnv = process.env.NODE_ENV;
+
+function setNodeEnv(value: string | undefined): void {
+  (process.env as Record<string, string | undefined>).NODE_ENV = value;
+}
+
+afterEach(() => {
+  setNodeEnv(initialNodeEnv);
+});
 
 function readCsp(response: Response): string {
   return response.headers.get("Content-Security-Policy") ?? "";
@@ -49,6 +59,31 @@ describe("proxy security headers", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("X-Frame-Options")).toBe("DENY");
     expect(response.headers.get("Content-Security-Policy")).toContain("script-src");
+  });
+
+  it("requires JWT-like session values for protected routes in production", () => {
+    setNodeEnv("production");
+
+    const weakCookieRequest = new NextRequest("http://localhost:3000/dashboard", {
+      headers: {
+        cookie: "__session=present",
+      },
+    });
+
+    const weakCookieResponse = proxy(weakCookieRequest);
+    expect(weakCookieResponse.status).toBe(307);
+
+    const jwtLikeCookieRequest = new NextRequest("http://localhost:3000/dashboard", {
+      headers: {
+        cookie: "__session=header.payload.signature",
+      },
+    });
+
+    const jwtLikeCookieResponse = proxy(jwtLikeCookieRequest);
+    expect(jwtLikeCookieResponse.status).toBe(200);
+    expect(jwtLikeCookieResponse.headers.get("Strict-Transport-Security")).toContain(
+      "max-age"
+    );
   });
 
   it("uses matcher exclusions for api and prefetch requests", () => {
